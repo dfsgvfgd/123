@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Remix Velvera: Abyssal Slasher",
+  "description": "2D Pixel-Art MMORPG Dungeon Slasher starring Velvera the Demon Dual-Blade warrior with weapon customization, deep skill trees, 10-stage dungeons, character gacha with pity \u0026 history, event notifications, and daily login rewards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
