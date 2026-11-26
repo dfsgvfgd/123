@@ -513,6 +513,30 @@ export const ACTIVE_SKILLS: Record<ActiveSkillId, ActiveSkillDef> = {
     accentHex: '#818CF8',
     owner: 'luna',
   },
+  luna_phantom_scythe: {
+    id: 'luna_phantom_scythe',
+    name: 'Phantom Crescent',
+    roleLabel: 'Sabit Lempar',
+    chainTag: 'wave',
+    description: 'Melempar sabit bayangan kosmik yang berputar memotong musuh depan lalu kembali ke Luna.',
+    cooldown: 5.2,
+    mpCost: 18,
+    basePower: 0.94,
+    accentHex: '#38BDF8',
+    owner: 'luna',
+  },
+  luna_abyssal_execution: {
+    id: 'luna_abyssal_execution',
+    name: 'Abyssal Execution',
+    roleLabel: 'Eksekusi AoE',
+    chainTag: 'aoe',
+    description: 'Menghujamkan tebasan sabit raksasa dari atas yang menghancurkan pertahanan monster sekitar.',
+    cooldown: 8.6,
+    mpCost: 26,
+    basePower: 1.14,
+    accentHex: '#C084FC',
+    owner: 'luna',
+  },
   void_tempest: {
     id: 'void_tempest',
     name: 'Void Tempest',
@@ -609,6 +633,30 @@ export const ACTIVE_SKILLS: Record<ActiveSkillId, ActiveSkillDef> = {
     accentHex: '#EF4444',
     owner: 'lyra',
   },
+  lyra_earthshaker_slam: {
+    id: 'lyra_earthshaker_slam',
+    name: 'Crimson Earthshaker',
+    roleLabel: 'Hantam Tanah',
+    chainTag: 'aoe',
+    description: 'Menghantam lantai katedral dengan tinju menyala, memicu gelombang kejut api emas luas.',
+    cooldown: 6.4,
+    mpCost: 20,
+    basePower: 0.98,
+    accentHex: '#FB923C',
+    owner: 'lyra',
+  },
+  lyra_phoenix_uppercut: {
+    id: 'lyra_phoenix_uppercut',
+    name: 'Phoenix Rising Upper',
+    roleLabel: 'Uppercut Api',
+    chainTag: 'blink',
+    description: 'Melonjak dengan uppercut naga api beruntun yang melontarkan musuh ke udara.',
+    cooldown: 5.8,
+    mpCost: 18,
+    basePower: 0.96,
+    accentHex: '#FBBF24',
+    owner: 'lyra',
+  },
   witch_raven_arcana: {
     id: 'witch_raven_arcana',
     name: 'Raven Lantern Swarm',
@@ -643,6 +691,30 @@ export const ACTIVE_SKILLS: Record<ActiveSkillId, ActiveSkillDef> = {
     mpCost: 19,
     basePower: 0.94,
     accentHex: '#E879F9',
+    owner: 'witch',
+  },
+  witch_arcane_lightning: {
+    id: 'witch_arcane_lightning',
+    name: 'Amethyst Thunder Call',
+    roleLabel: 'Petir Sihir',
+    chainTag: 'wave',
+    description: 'Memanggil sambaran petir amethyst berantai ke atas kepala 4 monster sekaligus.',
+    cooldown: 5.4,
+    mpCost: 18,
+    basePower: 0.95,
+    accentHex: '#38BDF8',
+    owner: 'witch',
+  },
+  witch_chrono_nova: {
+    id: 'witch_chrono_nova',
+    name: 'Astral Chrono Nova',
+    roleLabel: 'Nova · Pulih',
+    chainTag: 'aoe',
+    description: 'Melepaskan cincin bintang sihir yang memukul mundur musuh sekaligus memulihkan 10% HP.',
+    cooldown: 8.2,
+    mpCost: 24,
+    basePower: 1.04,
+    accentHex: '#F472B6',
     owner: 'witch',
   },
 };
@@ -1382,9 +1454,6 @@ export function formatSubSkillStatSummary(
     burn: ['Api', 'Burn'],
     freeze: ['Beku', 'Freeze'],
     poison: ['Racun', 'Poison'],
-    shadow: ['Bayangan', 'Shadow'],
-    blood: ['Darah', 'Blood'],
-    thunder: ['Petir', 'Thunder'],
   };
   const pair = elMap[def.element] ?? ['Racun', 'Poison'];
   const el = language === 'en' ? pair[1] : pair[0];
@@ -2284,6 +2353,16 @@ export function advanceSubStage(
     return { nextStage: stage + 1, nextSubStage: 1, dungeonCompleted: false };
   }
   return { nextStage: 10, nextSubStage: 5, dungeonCompleted: true };
+}
+
+export function getGlobalStageRoomNumber(stage: number, subStage: number): number {
+  const safeStage = Math.max(1, Math.floor(stage));
+  const safeSub = Math.max(1, Math.min(5, Math.floor(subStage)));
+  return (safeStage - 1) * 5 + safeSub;
+}
+
+export function shouldSpawnCatMerchant(stage: number, subStage: number): boolean {
+  return getGlobalStageRoomNumber(stage, subStage) % 3 === 0;
 }
 
 export function rollPortalSide(rng: () => number = Math.random): 'left' | 'right' {

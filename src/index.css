@@ -10,15 +10,37 @@
   html,
   body,
   #root {
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
     margin: 0;
     padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
     background-color: #09090e;
     color: #e8eef5;
     font-family: var(--font-sans);
-    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
+}
+
+.app-main-container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.mobile-control-btn,
+.mobile-dpad-btn,
+.mobile-skill-btn,
+.mobile-dash-btn,
+.mobile-jump-btn,
+.mobile-interact-btn {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .font-display {

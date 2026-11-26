@@ -20,12 +20,13 @@ import {
   MAX_RUN_INVENTORY,
   STAGE_TITLES,
 } from '../game/progression';
-import { formatKeyCodeLabel } from '../game/storage';
+import { formatKeyCodeLabel, normalizeMobileControls } from '../game/storage';
 import type {
   ActiveSkillId,
   HudSnapshot,
   Keybindings,
   LanguageCode,
+  MobileControlButtonId,
   MobileControlsSettings,
 } from '../game/types';
 import { CleanPortrait } from './CleanPortrait';
@@ -38,7 +39,7 @@ import {
   StoneActionButton,
 } from './FantasyActionUi';
 import { SilverCoinIcon, SubSkillIcon } from './ItemSkillIcons';
-import type { SanctumTab } from './SanctumModal';
+import type { SanctumScope, SanctumTab } from './SanctumModal';
 
 interface DungeonHudProps {
   hud: HudSnapshot;
@@ -57,7 +58,7 @@ interface DungeonHudProps {
   onToggleAutoCombat: () => void;
   onPause: () => void;
   onOpenSettings: () => void;
-  onOpenSanctum: (tab: SanctumTab) => void;
+  onOpenSanctum: (tab: SanctumTab, scope?: SanctumScope) => void;
   onOpenInventory: () => void;
   onTouchMove: (dir: -1 | 0 | 1) => void;
   onTouchDown: (active: boolean) => void;
@@ -116,7 +117,38 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
   onTouchInteract,
 }) => {
   const t = getUiStrings(language);
-  const touchOpacity = Math.max(0.25, Math.min(1, (mobileControls?.opacity ?? 90) / 100));
+  const normalizedMc = normalizeMobileControls(mobileControls);
+
+  const leftPointersRef = useRef<Set<number>>(new Set());
+  const rightPointersRef = useRef<Set<number>>(new Set());
+  const downPointersRef = useRef<Set<number>>(new Set());
+  const [dpadPressed, setDpadPressed] = useState<{ left: boolean; down: boolean; right: boolean }>({
+    left: false,
+    down: false,
+    right: false,
+  });
+
+  const syncMoveDirection = () => {
+    const hasL = leftPointersRef.current.size > 0;
+    const hasR = rightPointersRef.current.size > 0;
+    setDpadPressed({
+      left: hasL,
+      down: downPointersRef.current.size > 0,
+      right: hasR,
+    });
+    if (hasL && !hasR) onTouchMove(-1);
+    else if (hasR && !hasL) onTouchMove(1);
+    else onTouchMove(0);
+  };
+
+  const getBtnStyle = (id: MobileControlButtonId): React.CSSProperties => {
+    const cfg = normalizedMc.buttons[id];
+    return {
+      opacity: Math.max(0.3, Math.min(1, cfg.opacity / 100)),
+      transform: `translate(${cfg.offsetX}px, ${cfg.offsetY}px) scale(${cfg.scale})`,
+      transformOrigin: 'center center',
+    };
+  };
 
   const prevComboRef = useRef<number>(hud.combo);
   const [criticalPulseCount, setCriticalPulseCount] = useState(0);
@@ -125,13 +157,24 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
   useEffect(() => {
     const prev = prevComboRef.current;
     prevComboRef.current = hud.combo;
-    if (isCriticalComboMilestone(prev, hud.combo, CRITICAL_COMBO_INTERVAL)) {
+    const reachedExactMultiple =
+      hud.combo > 0 && hud.combo % CRITICAL_COMBO_INTERVAL === 0 && prev !== hud.combo;
+    if (reachedExactMultiple || isCriticalComboMilestone(prev, hud.combo, CRITICAL_COMBO_INTERVAL)) {
       setCriticalPulseCount((c) => c + 1);
       setCriticalPulseActive(true);
-    } else if (hud.combo === 0 && criticalPulseActive) {
+      window.dispatchEvent(
+        new CustomEvent('dungeon:screen-shake', {
+          detail: {
+            combo: hud.combo,
+            intensity: 0.55,
+            durationMs: 320,
+          },
+        })
+      );
+    } else if (hud.combo === 0) {
       setCriticalPulseActive(false);
     }
-  }, [hud.combo, criticalPulseActive]);
+  }, [hud.combo]);
 
   useEffect(() => {
     if (!criticalPulseActive) return;
@@ -189,16 +232,28 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
   const renderBossBar = (compact: boolean) => (
     <div
       data-testid={compact ? 'boss-hp-bar-mobile' : 'boss-hp-bar'}
-      className={`${compact ? 'w-full max-w-md px-3 py-1.5' : 'w-84 px-4 py-2'} border-2 border-[#B91C1C]/85 rounded-[6px]`}
-      style={STONE_CARD_STYLE}
+      className={`relative ${compact ? 'w-full max-w-md px-3 py-1.5' : 'w-full max-w-[384px] px-3 lg:px-4 py-1.5 lg:py-2'} border-2 border-[#B91C1C]/90 rounded-[7px]`}
+      style={{
+        background: 'linear-gradient(180deg, rgba(30,14,18,0.94) 0%, rgba(12,7,11,0.96) 100%)',
+        boxShadow:
+          'inset 0 1px 0 rgba(254,202,202,0.18), inset 0 0 14px rgba(185,28,28,0.22), 0 8px 22px rgba(0,0,0,0.72)',
+      }}
     >
+      {/* Forged crimson corner studs */}
+      <span aria-hidden="true" className="absolute top-1 left-1 w-1 h-1 rounded-xs bg-[#FACC15]/80" />
+      <span aria-hidden="true" className="absolute top-1 right-1 w-1 h-1 rounded-xs bg-[#FACC15]/80" />
       <div className="flex items-center justify-between text-[11px] sm:text-xs mb-1 gap-2">
-        <span className="font-display font-bold text-[#FCA5A5] truncate">
-          {hud.bossName}
-        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="px-1 py-0.5 rounded-[3px] bg-[#7F1D1D] border border-[#EF4444]/75 text-[9px] font-extrabold uppercase tracking-wider text-[#FECACA] shrink-0">
+            {t.bossBadge}
+          </span>
+          <span className="font-display font-bold text-[#FCA5A5] truncate hud-stroke">
+            {hud.bossName}
+          </span>
+        </div>
         <div className="flex items-center gap-1.5 shrink-0 font-mono-num">
-          <span className="text-[10px] sm:text-[11px] text-[#E2E8F0]">
-            {hud.bossHp}/{hud.bossMaxHp}
+          <span className="text-[10px] sm:text-[11px] font-bold text-[#F8FAFC] hud-stroke">
+            {hud.bossHp.toLocaleString('id-ID')}/{hud.bossMaxHp.toLocaleString('id-ID')}
           </span>
           <span
             className="px-1.5 py-0.5 rounded-[3px] text-[10px] font-extrabold text-[#09090E]"
@@ -211,7 +266,7 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
 
       {/* Stacked 5-Layer HP Bar */}
       <div
-        className="relative h-2.5 sm:h-3 w-full border border-[#3E2429] rounded-[2px] overflow-hidden"
+        className="relative h-2.5 sm:h-3 w-full border border-[#5C262E] rounded-[2px] overflow-hidden"
         style={{ backgroundColor: underLayerColor }}
       >
         <div
@@ -219,6 +274,7 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
           style={{
             width: `${layerFillPct}%`,
             backgroundColor: currentLayerColor,
+            boxShadow: `0 0 8px ${currentLayerColor}88`,
           }}
         />
       </div>
@@ -285,7 +341,7 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
         tabIndex={-1}
         onClick={(e) => {
           e.currentTarget.blur();
-          onOpenSanctum('weapon');
+          onOpenSanctum('weapon', 'weapon');
         }}
         aria-label="Sanctum"
         title="Sanctum"
@@ -411,7 +467,7 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div className="min-w-[96px] sm:min-w-[144px] md:min-w-[170px]">
+              <div className="min-w-[96px] sm:min-w-[136px] lg:min-w-[170px]">
                 <div className="flex items-center justify-between text-[11px] sm:text-xs mb-1 gap-1.5">
                   <span className="font-display font-bold text-[#F8FAFC] tracking-wide truncate">
                     {charMeta.name} {activeAwakening > 0 ? `A${activeAwakening}` : ''}
@@ -684,15 +740,13 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
 
       {/* Visually Prominent Combo Counter with Depleting Timer Bar & Critical 50x Pulse */}
       {hud.combo >= 1 && hud.comboTimerPct > 0 && (
-        <div
-          data-testid="hud-combo-counter"
-          data-critical={criticalPulseActive ? 'true' : 'false'}
-          aria-label={`${hud.combo}x Combo`}
-          className="self-end pr-1 sm:pr-2 md:pr-5"
-        >
+        <div className="self-start sm:self-end pl-1 sm:pl-0 sm:pr-2 md:pr-5 my-auto">
           <div
             key={criticalPulseActive ? `crit-${criticalPulseCount}` : 'combo-steady'}
-            className={`relative min-w-[138px] sm:min-w-[162px] px-3 py-2 rounded-[6px] border-2 text-right transition-colors ${
+            data-testid="hud-combo-counter"
+            data-critical={criticalPulseActive ? 'true' : 'false'}
+            aria-label={`${hud.combo}x Combo`}
+            className={`relative min-w-[126px] sm:min-w-[156px] px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-[6px] border-2 text-right transition-colors ${
               criticalPulseActive ? 'critical-combo-pulse' : ''
             }`}
             style={{
@@ -777,79 +831,131 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
         </div>
       )}
 
-      {/* Bottom Row: Forged Dark-Stone & Metal Controls (Auto Basic Attack: NO Serang / NO [4][5]) */}
+      {/* Bottom Row: Forged Semi-Transparent Multi-Touch Dark-Fantasy Controls */}
       {showTouchControls ? (
         <div className="flex items-end justify-between w-full gap-2">
-          {/* Left Stone D-Pad: Left, Down, Right */}
+          {/* Left Stone D-Pad: Left, Down, Right (Multi-Touch PointerEvents) */}
           <div
             data-testid="dungeon-touch-dpad"
-            className="pointer-events-auto flex items-center gap-1.5"
-            style={{
-              opacity: touchOpacity,
-              transform: `translate(${mobileControls?.dpadOffsetX ?? 0}px, ${mobileControls?.dpadOffsetY ?? 0}px)`,
-            }}
+            className="pointer-events-auto flex items-center gap-2"
           >
             <button
               type="button"
-              onTouchStart={(e) => {
+              tabIndex={-1}
+              data-testid="dungeon-dpad-left"
+              onPointerDown={(e) => {
                 e.preventDefault();
-                onTouchMove(-1);
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                leftPointersRef.current.add(e.pointerId);
+                syncMoveDirection();
               }}
-              onTouchEnd={() => onTouchMove(0)}
-              onMouseDown={() => onTouchMove(-1)}
-              onMouseUp={() => onTouchMove(0)}
-              onMouseLeave={() => onTouchMove(0)}
+              onPointerUp={(e) => {
+                leftPointersRef.current.delete(e.pointerId);
+                syncMoveDirection();
+              }}
+              onPointerCancel={(e) => {
+                leftPointersRef.current.delete(e.pointerId);
+                syncMoveDirection();
+              }}
+              onContextMenu={(e) => e.preventDefault()}
               aria-label={language === 'en' ? 'Move Left' : 'Gerak Kiri'}
-              className="w-11 h-11 rounded-[6px] bg-[#161824] border-2 border-[#6B5B45] text-[#F8FAFC] font-bold text-base active:border-[#C084FC] active:bg-[#241B38]"
-              style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}
+              className={`mobile-dpad-btn w-12 h-12 rounded-[8px] border-2 font-bold text-lg flex items-center justify-center transition-transform ${
+                dpadPressed.left
+                  ? 'border-[#FACC15] bg-[#2D1A44]/90 text-[#FEF08A] scale-95 shadow-[0_0_12px_rgba(250,204,21,0.45)]'
+                  : 'border-[#6B5B45]/90 bg-[#141624]/82 text-[#F8FAFC]'
+              }`}
+              style={{
+                ...getBtnStyle('left'),
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+              }}
             >
               ◀
             </button>
             <button
               type="button"
-              onTouchStart={(e) => {
+              tabIndex={-1}
+              data-testid="dungeon-dpad-down"
+              onPointerDown={(e) => {
                 e.preventDefault();
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                downPointersRef.current.add(e.pointerId);
+                setDpadPressed((p) => ({ ...p, down: true }));
                 onTouchDown(true);
               }}
-              onTouchEnd={() => onTouchDown(false)}
-              onMouseDown={() => onTouchDown(true)}
-              onMouseUp={() => onTouchDown(false)}
-              onMouseLeave={() => onTouchDown(false)}
+              onPointerUp={(e) => {
+                downPointersRef.current.delete(e.pointerId);
+                const active = downPointersRef.current.size > 0;
+                setDpadPressed((p) => ({ ...p, down: active }));
+                onTouchDown(active);
+              }}
+              onPointerCancel={(e) => {
+                downPointersRef.current.delete(e.pointerId);
+                const active = downPointersRef.current.size > 0;
+                setDpadPressed((p) => ({ ...p, down: active }));
+                onTouchDown(active);
+              }}
+              onContextMenu={(e) => e.preventDefault()}
               aria-label={language === 'en' ? 'Drop Down' : 'Turun'}
-              className="w-11 h-11 rounded-[6px] bg-[#161824] border-2 border-[#6B5B45] text-[#F8FAFC] font-bold text-base active:border-[#C084FC] active:bg-[#241B38]"
-              style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}
+              className={`mobile-dpad-btn w-12 h-12 rounded-[8px] border-2 font-bold text-lg flex items-center justify-center transition-transform ${
+                dpadPressed.down
+                  ? 'border-[#FACC15] bg-[#2D1A44]/90 text-[#FEF08A] scale-95 shadow-[0_0_12px_rgba(250,204,21,0.45)]'
+                  : 'border-[#6B5B45]/90 bg-[#141624]/82 text-[#CBD5E1]'
+              }`}
+              style={{
+                ...getBtnStyle('down'),
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+              }}
             >
               ▼
             </button>
             <button
               type="button"
-              onTouchStart={(e) => {
+              tabIndex={-1}
+              data-testid="dungeon-dpad-right"
+              onPointerDown={(e) => {
                 e.preventDefault();
-                onTouchMove(1);
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                rightPointersRef.current.add(e.pointerId);
+                syncMoveDirection();
               }}
-              onTouchEnd={() => onTouchMove(0)}
-              onMouseDown={() => onTouchMove(1)}
-              onMouseUp={() => onTouchMove(0)}
-              onMouseLeave={() => onTouchMove(0)}
+              onPointerUp={(e) => {
+                rightPointersRef.current.delete(e.pointerId);
+                syncMoveDirection();
+              }}
+              onPointerCancel={(e) => {
+                rightPointersRef.current.delete(e.pointerId);
+                syncMoveDirection();
+              }}
+              onContextMenu={(e) => e.preventDefault()}
               aria-label={language === 'en' ? 'Move Right' : 'Gerak Kanan'}
-              className="w-11 h-11 rounded-[6px] bg-[#161824] border-2 border-[#6B5B45] text-[#F8FAFC] font-bold text-base active:border-[#C084FC] active:bg-[#241B38]"
-              style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}
+              className={`mobile-dpad-btn w-12 h-12 rounded-[8px] border-2 font-bold text-lg flex items-center justify-center transition-transform ${
+                dpadPressed.right
+                  ? 'border-[#FACC15] bg-[#2D1A44]/90 text-[#FEF08A] scale-95 shadow-[0_0_12px_rgba(250,204,21,0.45)]'
+                  : 'border-[#6B5B45]/90 bg-[#141624]/82 text-[#F8FAFC]'
+              }`}
+              style={{
+                ...getBtnStyle('right'),
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+              }}
             >
               ▶
             </button>
           </div>
 
-          {/* Right Action Cluster: Skills [1][2][3] + Tas + Dash + Jump (NO Serang button) */}
+          {/* Right Action Cluster: Interact + Skills [1][2][3] + Dash + Jump */}
           <div className="pointer-events-auto flex flex-col items-end gap-1.5">
             {hud.nearInteractable && (
               <button
                 type="button"
+                tabIndex={-1}
                 data-testid="hud-interact-btn"
-                onClick={(e) => {
-                  e.currentTarget.blur();
+                onPointerDown={(e) => {
+                  e.preventDefault();
                   onTouchInteract();
                 }}
-                className="px-3.5 h-9 rounded-[5px] bg-[#FACC15] border-2 border-[#FEF08A] text-[#09090E] font-bold text-[11px] shadow-lg"
+                onContextMenu={(e) => e.preventDefault()}
+                style={getBtnStyle('interact')}
+                className="mobile-interact-btn px-3.5 h-9 rounded-[6px] bg-[#FACC15] border-2 border-[#FEF08A] text-[#09090E] font-bold text-[11px] shadow-lg"
               >
                 {language === 'en'
                   ? hud.nearInteractable === 'chest'
@@ -875,21 +981,20 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
 
             <div
               data-testid="dungeon-touch-skills"
-              className="flex items-start gap-1.5 flex-nowrap justify-end"
-              style={{
-                opacity: touchOpacity,
-                transform: `translate(${mobileControls?.skillsOffsetX ?? 0}px, ${mobileControls?.skillsOffsetY ?? 0}px)`,
-              }}
+              className="flex items-start gap-2 flex-nowrap justify-end"
             >
               {equippedSkills.map((skillId, idx) => {
                 const def = ACTIVE_SKILLS[skillId];
                 const cd = hud.skillCooldowns[idx];
                 const maxCd = hud.skillMaxCooldowns[idx] ?? def.cooldown;
                 const state = cd > 0 ? 'cooldown' : hud.mp < def.mpCost ? 'locked' : 'ready';
+                const btnId = (`skill${idx + 1}`) as MobileControlButtonId;
                 return (
                   <StoneActionButton
                     key={`${skillId}-${idx}`}
                     size="sm"
+                    controlClass="mobile-skill-btn"
+                    fireOnPointerDown
                     onClick={() => onTouchSkill(idx as 0 | 1 | 2)}
                     ariaLabel={`Skill ${idx + 1}: ${def.name} (${def.roleLabel})`}
                     title={`${def.name} · ${def.mpCost} MP`}
@@ -900,6 +1005,7 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
                     keyBadge={`${idx + 1}`}
                     subBadge={`${def.mpCost}`}
                     roleLabel={compactSkillRoleLabel(def.roleLabel)}
+                    wrapperStyle={getBtnStyle(btnId)}
                   >
                     <SkillFantasyIcon skillId={skillId} className="w-4 h-4" />
                   </StoneActionButton>
@@ -907,50 +1013,40 @@ export const DungeonHud: React.FC<DungeonHudProps> = ({
               })}
             </div>
 
-            <div className="flex items-start gap-1.5">
-              <div
-                data-testid="dungeon-touch-action"
-                className="flex items-start gap-1.5"
-                style={{
-                  opacity: touchOpacity,
-                  transform: `translate(${mobileControls?.actionOffsetX ?? 0}px, ${mobileControls?.actionOffsetY ?? 0}px)`,
-                }}
+            <div
+              data-testid="dungeon-touch-action"
+              className="flex items-start gap-2"
+            >
+              <StoneActionButton
+                size="sm"
+                controlClass="mobile-dash-btn"
+                fireOnPointerDown
+                onClick={onTouchDash}
+                ariaLabel={t.dash}
+                accentHex="#B09567"
+                state={hud.dashCooldown > 0 ? 'cooldown' : 'ready'}
+                cooldownSec={hud.dashCooldown}
+                maxCooldownSec={1.4}
+                roleLabel={t.dash}
+                wrapperStyle={getBtnStyle('dash')}
               >
-                <StoneActionButton
-                  size="sm"
-                  onClick={onTouchDash}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    onTouchDash();
-                  }}
-                  ariaLabel={t.dash}
-                  accentHex="#B09567"
-                  state={hud.dashCooldown > 0 ? 'cooldown' : 'ready'}
-                  cooldownSec={hud.dashCooldown}
-                  maxCooldownSec={1.4}
-                  roleLabel={t.dash}
-                >
-                  <DashFantasyIcon className="w-4 h-4" />
-                </StoneActionButton>
+                <DashFantasyIcon className="w-4 h-4" />
+              </StoneActionButton>
 
-                <StoneActionButton
-                  size="sm"
-                  onClick={onTouchJumpStart}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    onTouchJumpStart();
-                  }}
-                  onTouchEnd={onTouchJumpEnd}
-                  onMouseDown={onTouchJumpStart}
-                  onMouseUp={onTouchJumpEnd}
-                  ariaLabel={t.jump}
-                  accentHex="#38BDF8"
-                  state="ready"
-                  roleLabel={t.jump}
-                >
-                  <JumpFantasyIcon className="w-4 h-4" />
-                </StoneActionButton>
-              </div>
+              <StoneActionButton
+                size="sm"
+                controlClass="mobile-jump-btn"
+                onClick={onTouchJumpStart}
+                onPressStart={onTouchJumpStart}
+                onPressEnd={onTouchJumpEnd}
+                ariaLabel={t.jump}
+                accentHex="#38BDF8"
+                state="ready"
+                roleLabel={t.jump}
+                wrapperStyle={getBtnStyle('jump')}
+              >
+                <JumpFantasyIcon className="w-4 h-4" />
+              </StoneActionButton>
             </div>
           </div>
         </div>

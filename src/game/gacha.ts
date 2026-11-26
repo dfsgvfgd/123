@@ -1,11 +1,15 @@
 import type {
   CharacterId,
+  DailyQuestDef,
+  DailyQuestId,
+  DailyQuestMetric,
   DailyRewardDef,
   EventBannerNotice,
   GachaPoolItem,
   PullRecord,
   SaveData,
 } from './types';
+import { createInitialDailyQuestsState } from './storage';
 
 export const GACHA_COST_SINGLE = 160;
 export const GACHA_COST_TEN = 1600;
@@ -255,13 +259,13 @@ export function performSinglePull(
     gems: save.gems - GACHA_COST_SINGLE,
     forgeShards: save.forgeShards + bonusShards,
     skillEssence: save.skillEssence + bonusEssence,
-    lunaUnlocked: (save.lunaUnlocked ?? true) || chosen.id === FEATURED_LUNA.id,
+    lunaUnlocked: Boolean(save.lunaUnlocked) || chosen.id === FEATURED_LUNA.id,
     lunaAwakening: nextLunaAwakening,
     velveraUnlocked: save.velveraUnlocked || chosen.id === FEATURED_CHARACTER.id,
     velveraAwakening: nextVelveraAwakening,
     lyraUnlocked: save.lyraUnlocked || chosen.id === FEATURED_LYRA.id,
     lyraAwakening: nextLyraAwakening,
-    witchUnlocked: (save.witchUnlocked ?? true) || chosen.id === FEATURED_WITCH.id,
+    witchUnlocked: Boolean(save.witchUnlocked) || chosen.id === FEATURED_WITCH.id,
     witchAwakening: nextWitchAwakening,
     pityCount: nextPity,
     totalPulls: pullIndex,
@@ -362,5 +366,127 @@ export function claimEventBannerReward(save: SaveData, eventId: string): SaveDat
 export function getUnreadEventCount(save: SaveData): number {
   return EVENT_BANNERS.filter(
     (b) => !save.seenEventIds.includes(b.id) || !save.claimedEventRewardIds.includes(b.id)
+  ).length;
+}
+
+export const DAILY_QUESTS: DailyQuestDef[] = [
+  {
+    id: 'dq_kill_mobs',
+    titleId: 'Pemburu Katedral',
+    titleEn: 'Cathedral Slayer',
+    descId: 'Kalahkan 20 monster di dalam dungeon.',
+    descEn: 'Defeat 20 monsters inside the dungeon.',
+    metric: 'kills',
+    target: 20,
+    rewardGems: 160,
+    rewardGold: 500,
+    rewardEssence: 10,
+  },
+  {
+    id: 'dq_clear_stages',
+    titleId: 'Penjelajah Lorong',
+    titleEn: 'Chamber Explorer',
+    descId: 'Selesaikan 3 ruangan stage dungeon.',
+    descEn: 'Clear 3 dungeon stage chambers.',
+    metric: 'stagesCleared',
+    target: 3,
+    rewardGems: 200,
+    rewardGold: 700,
+    rewardEssence: 15,
+  },
+  {
+    id: 'dq_open_chests',
+    titleId: 'Pemburu Harta',
+    titleEn: 'Treasure Seeker',
+    descId: 'Buka 3 peti perbekalan atau makam di stage.',
+    descEn: 'Open 3 supply chests or tombs in stages.',
+    metric: 'chestsOpened',
+    target: 3,
+    rewardGems: 160,
+    rewardGold: 450,
+    rewardEssence: 12,
+  },
+  {
+    id: 'dq_gacha_pulls',
+    titleId: 'Panggilan Astral',
+    titleEn: 'Astral Summoner',
+    descId: 'Lakukan 1 kali tarikan Summon Gacha.',
+    descEn: 'Perform 1 Summon Gacha pull.',
+    metric: 'pulls',
+    target: 1,
+    rewardGems: 240,
+    rewardGold: 600,
+    rewardEssence: 15,
+  },
+];
+
+export function syncDailyQuestDate(save: SaveData, todayKey: string): SaveData {
+  if (save.dailyQuests && save.dailyQuests.dateKey === todayKey) {
+    return save;
+  }
+  return {
+    ...save,
+    dailyQuests: createInitialDailyQuestsState(todayKey),
+  };
+}
+
+export function trackDailyQuestProgress(
+  save: SaveData,
+  metric: DailyQuestMetric,
+  amount = 1,
+  todayKey: string
+): SaveData {
+  const synced = syncDailyQuestDate(save, todayKey);
+  const currentVal = synced.dailyQuests.progress[metric] ?? 0;
+  return {
+    ...synced,
+    dailyQuests: {
+      ...synced.dailyQuests,
+      progress: {
+        ...synced.dailyQuests.progress,
+        [metric]: currentVal + Math.max(0, amount),
+      },
+    },
+  };
+}
+
+export function claimDailyQuestReward(
+  save: SaveData,
+  questId: DailyQuestId,
+  todayKey: string
+): { nextSave: SaveData; quest: DailyQuestDef } {
+  const synced = syncDailyQuestDate(save, todayKey);
+  const quest = DAILY_QUESTS.find((q) => q.id === questId);
+  if (!quest) {
+    throw new Error('Misi harian tidak ditemukan.');
+  }
+  if (synced.dailyQuests.claimedIds.includes(questId)) {
+    throw new Error('Hadiah misi harian sudah diklaim.');
+  }
+  const prog = synced.dailyQuests.progress[quest.metric] ?? 0;
+  if (prog < quest.target) {
+    throw new Error('Progres misi harian belum selesai.');
+  }
+  return {
+    quest,
+    nextSave: {
+      ...synced,
+      gems: synced.gems + quest.rewardGems,
+      gold: synced.gold + quest.rewardGold,
+      skillEssence: synced.skillEssence + quest.rewardEssence,
+      dailyQuests: {
+        ...synced.dailyQuests,
+        claimedIds: [...synced.dailyQuests.claimedIds, questId],
+      },
+    },
+  };
+}
+
+export function getClaimableDailyQuestCount(save: SaveData, todayKey: string): number {
+  const synced = syncDailyQuestDate(save, todayKey);
+  return DAILY_QUESTS.filter(
+    (q) =>
+      !synced.dailyQuests.claimedIds.includes(q.id) &&
+      (synced.dailyQuests.progress[q.metric] ?? 0) >= q.target
   ).length;
 }

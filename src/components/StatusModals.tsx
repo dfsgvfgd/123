@@ -425,8 +425,7 @@ export const ChestRewardModal: React.FC<ChestModalProps> = ({
   const t = getUiStrings(language);
   const skill = getSkillDef(reward.skillId);
   const isTomb = reward.source === 'tomb';
-  const subSkillFlag = isSubSkillId(reward.skillId);
-  const statSummary = subSkillFlag
+  const statSummary = isSubSkillId(reward.skillId)
     ? formatSubSkillStatSummary(reward.skillId, reward.newLevel, language)
     : skill.roleLabel;
   const isMax = reward.newLevel >= MAX_SUB_SKILL_LEVEL;
@@ -454,13 +453,13 @@ export const ChestRewardModal: React.FC<ChestModalProps> = ({
             : `${t.bossChestModalTitle} · ${reward.stage}-5`}
         </div>
 
-        {subSkillFlag && (
+        {isSubSkillId(reward.skillId) && (
           <div
             className="mx-auto mt-2.5 w-11 h-11 rounded bg-[#0A0B12] border flex items-center justify-center"
             style={{ borderColor: skill.accentHex }}
           >
             <SubSkillIcon
-              skillId={reward.skillId as SubSkillId}
+              skillId={reward.skillId}
               color={skill.accentHex}
               className="w-6 h-6"
             />

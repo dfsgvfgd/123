@@ -1,4 +1,12 @@
-import type { Keybindings, MobileControlsSettings, SaveData } from './types';
+import type {
+  CharacterId,
+  DailyQuestState,
+  Keybindings,
+  MobileButtonConfig,
+  MobileControlButtonId,
+  MobileControlsSettings,
+  SaveData,
+} from './types';
 
 export const SAVE_STORAGE_KEY = 'velvera_abyssal_slasher_save_v1';
 
@@ -16,6 +24,42 @@ export const DEFAULT_KEYBINDINGS: Keybindings = {
   inventory: 'KeyI',
 };
 
+export const ALL_MOBILE_BUTTON_IDS: MobileControlButtonId[] = [
+  'left',
+  'down',
+  'right',
+  'jump',
+  'dash',
+  'skill1',
+  'skill2',
+  'skill3',
+  'interact',
+];
+
+export const DEFAULT_MOBILE_BUTTON_CONFIG: MobileButtonConfig = {
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+  opacity: 88,
+};
+
+export function createDefaultMobileButtons(
+  baseOpacity = 88
+): Record<MobileControlButtonId, MobileButtonConfig> {
+  const op = Math.max(30, Math.min(100, Math.round(baseOpacity)));
+  return {
+    left: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+    down: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+    right: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+    jump: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+    dash: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+    skill1: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+    skill2: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+    skill3: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+    interact: { offsetX: 0, offsetY: 0, scale: 1, opacity: op },
+  };
+}
+
 export const DEFAULT_MOBILE_CONTROLS: MobileControlsSettings = {
   opacity: 88,
   dpadOffsetX: 0,
@@ -24,7 +68,36 @@ export const DEFAULT_MOBILE_CONTROLS: MobileControlsSettings = {
   actionOffsetY: 0,
   skillsOffsetX: 0,
   skillsOffsetY: 0,
+  buttons: createDefaultMobileButtons(88),
 };
+
+export function normalizeMobileControls(
+  raw?: Partial<MobileControlsSettings> | null
+): MobileControlsSettings {
+  const globalOpacity = Math.max(30, Math.min(100, Math.round(raw?.opacity ?? 88)));
+  const defaults = createDefaultMobileButtons(globalOpacity);
+  const rawButtons = raw?.buttons as Partial<Record<MobileControlButtonId, Partial<MobileButtonConfig>>> | undefined;
+  const buttons = { ...defaults };
+  for (const id of ALL_MOBILE_BUTTON_IDS) {
+    const entry = rawButtons?.[id];
+    buttons[id] = {
+      offsetX: Math.max(-320, Math.min(320, Math.round(entry?.offsetX ?? 0))),
+      offsetY: Math.max(-320, Math.min(320, Math.round(entry?.offsetY ?? 0))),
+      scale: Math.max(0.5, Math.min(2.0, Number((entry?.scale ?? 1).toFixed(2)))),
+      opacity: Math.max(30, Math.min(100, Math.round(entry?.opacity ?? globalOpacity))),
+    };
+  }
+  return {
+    opacity: globalOpacity,
+    dpadOffsetX: Math.max(-260, Math.min(260, Math.round(raw?.dpadOffsetX ?? 0))),
+    dpadOffsetY: Math.max(-260, Math.min(260, Math.round(raw?.dpadOffsetY ?? 0))),
+    actionOffsetX: Math.max(-260, Math.min(260, Math.round(raw?.actionOffsetX ?? 0))),
+    actionOffsetY: Math.max(-260, Math.min(260, Math.round(raw?.actionOffsetY ?? 0))),
+    skillsOffsetX: Math.max(-260, Math.min(260, Math.round(raw?.skillsOffsetX ?? 0))),
+    skillsOffsetY: Math.max(-260, Math.min(260, Math.round(raw?.skillsOffsetY ?? 0))),
+    buttons,
+  };
+}
 
 export function formatKeyCodeLabel(code: string): string {
   if (code.startsWith('Key')) return code.slice(3);
@@ -45,20 +118,41 @@ export function getTodayDateKey(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-export function createInitialSaveData(): SaveData {
+export function createInitialDailyQuestsState(todayKey: string = getTodayDateKey()): DailyQuestState {
   return {
-    gems: 480,
+    dateKey: todayKey,
+    progress: {
+      kills: 0,
+      stagesCleared: 0,
+      pulls: 0,
+      chestsOpened: 0,
+    },
+    claimedIds: [],
+  };
+}
+
+export function isCharacterUnlocked(save: Pick<SaveData, 'lunaUnlocked' | 'velveraUnlocked' | 'lyraUnlocked' | 'witchUnlocked'>, id: CharacterId): boolean {
+  if (id === 'luna') return Boolean(save.lunaUnlocked);
+  if (id === 'lyra') return Boolean(save.lyraUnlocked);
+  if (id === 'witch') return Boolean(save.witchUnlocked);
+  return save.velveraUnlocked ?? true;
+}
+
+export function createInitialSaveData(): SaveData {
+  const todayKey = getTodayDateKey();
+  return {
+    gems: 2400,
     gold: 600,
     forgeShards: 18,
     skillEssence: 35,
-    selectedCharacter: 'luna',
-    lunaUnlocked: true,
+    selectedCharacter: 'velvera',
+    lunaUnlocked: false,
     lunaAwakening: 0,
     velveraUnlocked: true,
     velveraAwakening: 0,
-    lyraUnlocked: true,
+    lyraUnlocked: false,
     lyraAwakening: 0,
-    witchUnlocked: true,
+    witchUnlocked: false,
     witchAwakening: 0,
     pityCount: 0,
     totalPulls: 0,
@@ -93,6 +187,8 @@ export function createInitialSaveData(): SaveData {
       luna_soul_harvest: 1,
       luna_umbral_rush: 1,
       luna_lunar_eclipse: 1,
+      luna_phantom_scythe: 0,
+      luna_abyssal_execution: 0,
       void_tempest: 1,
       phantom_blink: 1,
       abyssal_crescent: 1,
@@ -101,9 +197,13 @@ export function createInitialSaveData(): SaveData {
       lyra_fist_rush: 1,
       lyra_cyclone_kick: 1,
       lyra_aura_overdrive: 1,
+      lyra_earthshaker_slam: 0,
+      lyra_phoenix_uppercut: 0,
       witch_raven_arcana: 1,
       witch_starfall_meteor: 1,
       witch_void_vortex: 1,
+      witch_arcane_lightning: 0,
+      witch_chrono_nova: 0,
     },
     passiveLevels: {
       demon_vigor: 0,
@@ -117,6 +217,7 @@ export function createInitialSaveData(): SaveData {
       claimedDays: [],
       lastClaimDate: null,
     },
+    dailyQuests: createInitialDailyQuestsState(todayKey),
     seenEventIds: [],
     claimedEventRewardIds: [],
     characterLevel: 1,
@@ -136,7 +237,7 @@ export function createInitialSaveData(): SaveData {
       sfxVolume: 85,
       muted: false,
     },
-    mobileControls: { ...DEFAULT_MOBILE_CONTROLS },
+    mobileControls: normalizeMobileControls(DEFAULT_MOBILE_CONTROLS),
     keybindings: { ...DEFAULT_KEYBINDINGS },
   };
 }
@@ -168,7 +269,14 @@ export function loadSaveData(): SaveData {
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<SaveData>;
 
-    const selectedCharacter =
+    const unlocks = {
+      lunaUnlocked: Boolean(parsed.lunaUnlocked),
+      velveraUnlocked: parsed.velveraUnlocked ?? true,
+      lyraUnlocked: Boolean(parsed.lyraUnlocked),
+      witchUnlocked: Boolean(parsed.witchUnlocked),
+    };
+
+    const candidateChar: CharacterId =
       parsed.selectedCharacter === 'luna'
         ? 'luna'
         : parsed.selectedCharacter === 'witch'
@@ -176,10 +284,30 @@ export function loadSaveData(): SaveData {
           : parsed.selectedCharacter === 'lyra'
             ? 'lyra'
             : 'velvera';
+    const selectedCharacter: CharacterId = isCharacterUnlocked(unlocks, candidateChar)
+      ? candidateChar
+      : 'velvera';
+
+    const todayKey = getTodayDateKey();
+    const parsedQuests = parsed.dailyQuests;
+    const dailyQuests: DailyQuestState =
+      parsedQuests && parsedQuests.dateKey === todayKey
+        ? {
+            dateKey: todayKey,
+            progress: {
+              kills: Math.max(0, Number(parsedQuests.progress?.kills ?? 0)),
+              stagesCleared: Math.max(0, Number(parsedQuests.progress?.stagesCleared ?? 0)),
+              pulls: Math.max(0, Number(parsedQuests.progress?.pulls ?? 0)),
+              chestsOpened: Math.max(0, Number(parsedQuests.progress?.chestsOpened ?? 0)),
+            },
+            claimedIds: Array.isArray(parsedQuests.claimedIds) ? parsedQuests.claimedIds : [],
+          }
+        : createInitialDailyQuestsState(todayKey);
 
     return {
       ...fallback,
       ...parsed,
+      ...unlocks,
       selectedCharacter,
       language: parsed.language === 'en' ? 'en' : 'id',
       lunaWeapon: { ...fallback.lunaWeapon, ...(parsed.lunaWeapon ?? {}) },
@@ -189,9 +317,10 @@ export function loadSaveData(): SaveData {
       skillLevels: { ...fallback.skillLevels, ...(parsed.skillLevels ?? {}) },
       passiveLevels: { ...fallback.passiveLevels, ...(parsed.passiveLevels ?? {}) },
       dailyLogin: { ...fallback.dailyLogin, ...(parsed.dailyLogin ?? {}) },
+      dailyQuests,
       bestiaryKills: { ...fallback.bestiaryKills, ...(parsed.bestiaryKills ?? {}) },
       audioSettings: { ...fallback.audioSettings, ...(parsed.audioSettings ?? {}) },
-      mobileControls: { ...DEFAULT_MOBILE_CONTROLS, ...(parsed.mobileControls ?? {}) },
+      mobileControls: normalizeMobileControls(parsed.mobileControls),
       keybindings: { ...DEFAULT_KEYBINDINGS, ...(parsed.keybindings ?? {}) },
       claimedBestiaryIds: Array.isArray(parsed.claimedBestiaryIds)
         ? parsed.claimedBestiaryIds

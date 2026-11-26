@@ -8,19 +8,22 @@ import {
   Flame,
   Gem,
   History,
+  Lock,
   Sparkles,
   Swords,
   X,
 } from 'lucide-react';
-import { computePlayerStats } from '../game/combatMath';
+import { ATK_PER_CHAR_LEVEL, COMBAT_DAMAGE_SCALE, computePlayerStats } from '../game/combatMath';
 import {
   DAILY_LOGIN_REWARDS,
+  DAILY_QUESTS,
   EVENT_BANNERS,
   GACHA_COST_SINGLE,
   GACHA_COST_TEN,
   getNextClaimableDailyDay,
   HARD_PITY_LIMIT,
   SOFT_PITY_START,
+  syncDailyQuestDate,
 } from '../game/gacha';
 import {
   ACTIVE_SKILLS,
@@ -41,12 +44,13 @@ import {
   WITCH_WEAPON_STYLES,
 } from '../game/progression';
 import { getUiStrings } from '../game/i18n';
-import { getTodayDateKey } from '../game/storage';
+import { getTodayDateKey, isCharacterUnlocked } from '../game/storage';
 import type {
   ActiveSkillId,
   BladeAuraId,
   BladeStyleId,
   CharacterId,
+  DailyQuestId,
   GachaRarity,
   LanguageCode,
   LyraWeaponId,
@@ -104,11 +108,13 @@ interface SanctumModalProps {
   open: boolean;
   scope?: SanctumScope;
   initialTab: SanctumTab;
+  initialGachaBanner?: CharacterId;
   language?: LanguageCode;
   save: SaveData;
   latestPulls: PullRecord[];
   onClose: () => void;
   onSelectCharacter: (id: CharacterId) => void;
+  onOpenGachaForHero?: (heroId: CharacterId) => void;
   onPullSingle: (bannerId: CharacterId) => void;
   onPullTen: (bannerId: CharacterId) => void;
   onChangeLunaWeaponStyle: (style: ScytheWeaponId) => void;
@@ -124,6 +130,7 @@ interface SanctumModalProps {
   onUpgradeCharacter: () => void;
   onClaimBestiary: (monsterId: MonsterType) => void;
   onClaimDaily: () => void;
+  onClaimDailyQuest: (questId: DailyQuestId) => void;
   onClaimEvent: (eventId: string) => void;
 }
 
@@ -131,11 +138,13 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
   open,
   scope = 'character',
   initialTab,
+  initialGachaBanner,
   language = 'id',
   save,
   latestPulls,
   onClose,
   onSelectCharacter,
+  onOpenGachaForHero,
   onPullSingle,
   onPullTen,
   onChangeLunaWeaponStyle,
@@ -151,10 +160,13 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
   onUpgradeCharacter,
   onClaimBestiary,
   onClaimDaily,
+  onClaimDailyQuest,
   onClaimEvent,
 }) => {
   const [tab, setTab] = useState<SanctumTab>(initialTab);
-  const [gachaBanner, setGachaBanner] = useState<CharacterId>(save.selectedCharacter ?? 'luna');
+  const [gachaBanner, setGachaBanner] = useState<CharacterId>(
+    initialGachaBanner ?? save.selectedCharacter ?? 'velvera'
+  );
   const [showHistory, setShowHistory] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<'ALL' | GachaRarity>('ALL');
   const [selectedSkillSlot, setSelectedSkillSlot] = useState<0 | 1 | 2>(0);
@@ -164,9 +176,9 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
     setTab(initialTab);
     if (open) {
       setShowHistory(false);
-      setGachaBanner(save.selectedCharacter ?? 'luna');
+      setGachaBanner(initialGachaBanner ?? save.selectedCharacter ?? 'velvera');
     }
-  }, [initialTab, open, save.selectedCharacter]);
+  }, [initialTab, initialGachaBanner, open, save.selectedCharacter]);
 
   useEffect(() => {
     if (!open || tab !== 'weapon') return;
@@ -263,16 +275,22 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
 
   const modalTitle =
     scope === 'gacha'
-      ? language === 'en'
-        ? 'SUMMON GACHA'
-        : 'SUMMON GACHA'
+      ? 'SUMMON GACHA'
       : scope === 'weapon'
         ? language === 'en'
           ? 'ENCHANT & FORGE ALTAR'
           : 'ALTAR ENCHANT & SENJATA'
-        : language === 'en'
-          ? 'CHARACTER · SKILL · WEAPON'
-          : 'KARAKTER · SKILL · SENJATA';
+        : scope === 'events'
+          ? language === 'en'
+            ? 'EVENT BANNERS & NOTICES'
+            : 'EVENT & PENGUMUMAN'
+          : scope === 'daily'
+            ? language === 'en'
+              ? 'DAILY LOGIN & QUESTS'
+              : 'HARIAN & MISI'
+            : language === 'en'
+              ? 'CHARACTER · SKILL · WEAPON'
+              : 'KARAKTER · SKILL · SENJATA';
 
   return (
     <div
@@ -941,11 +959,12 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
           {/* TAB 3: CHARACTER SELECTION, UPGRADE + SKILL & MASTERY TREE */}
           {tab === 'skills' && (
             <div className="space-y-6">
-              {/* Playable Character Switcher */}
+              {/* Playable Character Switcher (Only Velvera starts unlocked; others unlock via Gacha) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {(['luna', 'velvera', 'lyra', 'witch'] as CharacterId[]).map((cId) => {
+                {(['velvera', 'luna', 'lyra', 'witch'] as CharacterId[]).map((cId) => {
                   const charInfo = CHARACTER_ROSTER[cId];
-                  const active = save.selectedCharacter === cId;
+                  const unlocked = isCharacterUnlocked(save, cId);
+                  const active = unlocked && save.selectedCharacter === cId;
                   const awk =
                     cId === 'luna'
                       ? save.lunaAwakening ?? 0
@@ -955,38 +974,62 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
                           ? save.lyraAwakening
                           : save.velveraAwakening;
                   return (
-                    <button
+                    <div
                       key={cId}
-                      type="button"
-                      onClick={() => onSelectCharacter(cId)}
-                      className={`p-3.5 rounded border text-left flex items-center gap-3.5 cursor-pointer ${
+                      data-testid={`hero-card-${cId}`}
+                      className={`p-3.5 rounded border text-left flex items-center gap-3.5 ${
                         active
                           ? 'bg-[#1B1830]'
-                          : 'bg-[#12131D] border-[#26293A] hover:border-[#8A7656]'
+                          : unlocked
+                            ? 'bg-[#12131D] border-[#26293A] hover:border-[#8A7656]'
+                            : 'bg-[#0E0F17] border-[#222536] opacity-85'
                       }`}
                       style={active ? { borderColor: charInfo.accentHex } : undefined}
                     >
-                      <div className="w-14 h-14 rounded overflow-hidden bg-[#09090E] border border-[#334155] shrink-0">
+                      <div className="relative w-14 h-14 rounded overflow-hidden bg-[#09090E] border border-[#334155] shrink-0">
                         <CleanPortrait
                           src={charInfo.portraitPath}
                           alt={charInfo.name}
                           removeSolidBg={cId === 'luna' || cId === 'witch'}
                           removeCheckerboard={cId === 'lyra'}
                           faceCrop={cId}
-                          className="w-full h-full object-cover"
+                          className={`w-full h-full object-cover ${!unlocked ? 'grayscale brightness-75' : ''}`}
                         />
+                        {!unlocked && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-[#09090E]/55">
+                            <Lock className="w-5 h-5 text-[#FACC15]" />
+                          </div>
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-display text-base font-bold text-[#F8FAFC]">
                             {charInfo.name}
                           </span>
-                          <span
-                            className="text-[11px] font-mono-num font-bold"
-                            style={{ color: charInfo.accentHex }}
-                          >
-                            {active ? 'Dipakai' : 'Pilih'} · A{awk}
-                          </span>
+                          {unlocked ? (
+                            <button
+                              type="button"
+                              data-testid={`hero-select-${cId}`}
+                              disabled={active}
+                              onClick={() => onSelectCharacter(cId)}
+                              className={`px-2.5 py-0.5 rounded text-[11px] font-mono-num font-bold cursor-pointer disabled:cursor-default ${
+                                active
+                                  ? 'bg-[#1D1B32] border border-current'
+                                  : 'bg-[#1C1F2E] hover:bg-[#2A2E45]'
+                              }`}
+                              style={{ color: charInfo.accentHex }}
+                            >
+                              {active ? (language === 'en' ? 'Active' : 'Dipakai') : (language === 'en' ? 'Select' : 'Pilih')} · A{awk}
+                            </button>
+                          ) : (
+                            <span
+                              data-testid={`hero-locked-${cId}`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1A1C28] border border-[#8A7656]/55 text-[10px] font-bold text-[#FACC15]"
+                            >
+                              <Lock className="w-3 h-3" />
+                              {t.heroLockedBadge}
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] font-semibold text-[#B09567]">
                           {charInfo.weaponStyle}
@@ -994,8 +1037,19 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
                         <p className="text-[11px] text-[#94A3B8] mt-0.5 line-clamp-2">
                           {charInfo.description}
                         </p>
+                        {!unlocked && onOpenGachaForHero && (
+                          <button
+                            type="button"
+                            data-testid={`hero-unlock-gacha-${cId}`}
+                            onClick={() => onOpenGachaForHero(cId)}
+                            className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold bg-[#7E22CE] hover:bg-[#9333EA] text-white cursor-pointer"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            <span>{t.heroUnlockGachaBtn}</span>
+                          </button>
+                        )}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -1012,7 +1066,7 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
                   <div className="flex flex-wrap items-center gap-3 text-xs font-mono-num text-[#CBD5E1] mt-1">
                     <span>Max HP: <strong className="text-[#4ADE80]">{stats.maxHp}</strong> (+18/Lv)</span>
                     <span aria-hidden="true">·</span>
-                    <span>Attack: <strong className="text-[#C084FC]">{stats.attack}</strong> (+4/Lv)</span>
+                    <span>Attack: <strong className="text-[#C084FC]">{stats.attack}</strong> (+{ATK_PER_CHAR_LEVEL * COMBAT_DAMAGE_SCALE}/Lv)</span>
                     <span aria-hidden="true">·</span>
                     <span>Speed: <strong className="text-[#FACC15]">{stats.attackSpeedMult.toFixed(2)}x</strong></span>
                   </div>
@@ -1033,15 +1087,19 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
                 </button>
               </div>
 
-              {/* Active Skills Equip & Upgrade up to Lv.10 (Sanctum-only) */}
+              {/* Active Skills Equip (3 of 5) & Upgrade up to Lv.10 (Sanctum-only) */}
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                   <div>
                     <h3 className="font-display text-base font-bold text-[#F8FAFC]">
-                      Skill Aktif {CHARACTER_ROSTER[save.selectedCharacter].name} (Slot 1 · 2 · 3 · Maks Lv.{MAX_ACTIVE_SKILL_LEVEL})
+                      {language === 'en'
+                        ? `Active Skills ${CHARACTER_ROSTER[save.selectedCharacter].name} (3/${getCharacterActiveSkills(save.selectedCharacter).length} Equipped · Max Lv.${MAX_ACTIVE_SKILL_LEVEL})`
+                        : `Skill Aktif ${CHARACTER_ROSTER[save.selectedCharacter].name} (3/${getCharacterActiveSkills(save.selectedCharacter).length} Terpasang · Maks Lv.${MAX_ACTIVE_SKILL_LEVEL})`}
                     </h3>
                     <p className="text-xs text-[#94A3B8]">
-                      Hanya dapat ditingkatkan di sini hingga Lv.10 memakai Gold & Essence. Sub-Skill elemen hanya muncul di dalam stage dari Peti Boss & Makam.
+                      {language === 'en'
+                        ? `Choose 3 of ${getCharacterActiveSkills(save.selectedCharacter).length} hero skills for Slots 1–3 and upgrade up to Lv.10 here. Sub-Skills drop inside stages.`
+                        : `Pilih 3 dari ${getCharacterActiveSkills(save.selectedCharacter).length} skill karakter untuk Slot 1–3 dan tingkatkan hingga Lv.10 di sini. Sub-Skill muncul di dalam stage.`}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 p-1 bg-[#141621] rounded">
@@ -1262,64 +1320,135 @@ export const SanctumModal: React.FC<SanctumModalProps> = ({
             </div>
           )}
 
-          {/* TAB 5: DAILY LOGIN REWARDS */}
-          {tab === 'daily' && (
-            <div className="space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-display text-lg font-bold text-[#F8FAFC]">
-                    Hadiah Login Harian (Mata Uang Premium)
-                  </h3>
-                  <p className="text-xs text-[#94A3B8] mt-0.5">
-                    Login setiap hari untuk mengklaim Abyssal Gems, Gold, dan Forge Shards.
-                  </p>
+          {/* TAB 5: DAILY LOGIN REWARDS & DAILY QUESTS */}
+          {tab === 'daily' && (() => {
+            const syncedDailySave = syncDailyQuestDate(save, todayKey);
+            return (
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-[#F8FAFC]">
+                      Hadiah Login Harian (Mata Uang Premium)
+                    </h3>
+                    <p className="text-xs text-[#94A3B8] mt-0.5">
+                      Login setiap hari untuk mengklaim Abyssal Gems, Gold, dan Forge Shards.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={nextDailyDay === null}
+                    onClick={onClaimDaily}
+                    className="px-5 py-2.5 text-xs font-bold rounded bg-[#FACC15] hover:bg-[#FDE047] disabled:opacity-45 text-[#09090E] cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    {nextDailyDay === null
+                      ? 'Sudah Diklaim Hari Ini'
+                      : `Klaim Hadiah Hari ${nextDailyDay}`}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={nextDailyDay === null}
-                  onClick={onClaimDaily}
-                  className="px-5 py-2.5 text-xs font-bold rounded bg-[#FACC15] hover:bg-[#FDE047] disabled:opacity-45 text-[#09090E] cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  {nextDailyDay === null
-                    ? 'Sudah Diklaim Hari Ini'
-                    : `Klaim Hadiah Hari ${nextDailyDay}`}
-                </button>
-              </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-                {DAILY_LOGIN_REWARDS.map((reward) => {
-                  const isClaimed = save.dailyLogin.claimedDays.includes(reward.day);
-                  const isNext = nextDailyDay === reward.day;
-                  return (
-                    <div
-                      key={reward.day}
-                      className={`p-3.5 rounded border flex flex-col justify-between ${
-                        isNext
-                          ? 'bg-[#251839] border-[#FACC15]'
-                          : isClaimed
-                            ? 'bg-[#12141E] border-[#334155] opacity-75'
-                            : 'bg-[#12131D] border-[#26293A]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-xs font-bold">
-                        <span className="text-[#E2E8F0]">{reward.label}</span>
-                        {isClaimed && <Check className="w-4 h-4 text-[#4ADE80]" />}
-                      </div>
-                      <div className="my-3">
-                        <div className="font-mono-num text-lg font-bold text-[#C084FC]">
-                          +{reward.gems}
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                  {DAILY_LOGIN_REWARDS.map((reward) => {
+                    const isClaimed = save.dailyLogin.claimedDays.includes(reward.day);
+                    const isNext = nextDailyDay === reward.day;
+                    return (
+                      <div
+                        key={reward.day}
+                        className={`p-3.5 rounded border flex flex-col justify-between ${
+                          isNext
+                            ? 'bg-[#251839] border-[#FACC15]'
+                            : isClaimed
+                              ? 'bg-[#12141E] border-[#334155] opacity-75'
+                              : 'bg-[#12131D] border-[#26293A]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs font-bold">
+                          <span className="text-[#E2E8F0]">{reward.label}</span>
+                          {isClaimed && <Check className="w-4 h-4 text-[#4ADE80]" />}
                         </div>
-                        <div className="text-[11px] text-[#CBD5E1]">Abyssal Gems</div>
+                        <div className="my-3">
+                          <div className="font-mono-num text-lg font-bold text-[#C084FC]">
+                            +{reward.gems}
+                          </div>
+                          <div className="text-[11px] text-[#CBD5E1]">Abyssal Gems</div>
+                        </div>
+                        <div className="font-mono-num text-[11px] text-[#94A3B8]">
+                          +{reward.gold}G · +{reward.shards} Shards
+                        </div>
                       </div>
-                      <div className="font-mono-num text-[11px] text-[#94A3B8]">
-                        +{reward.gold}G · +{reward.shards} Shards
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+
+                {/* Daily Quests Panel */}
+                <div className="pt-5 border-t border-[#252838] space-y-3">
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-[#F8FAFC]">
+                      {t.dailyQuestsTitle}
+                    </h3>
+                    <p className="text-xs text-[#94A3B8] mt-0.5">{t.dailyQuestsSubtitle}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {DAILY_QUESTS.map((quest) => {
+                      const prog = syncedDailySave.dailyQuests.progress[quest.metric] ?? 0;
+                      const claimed = syncedDailySave.dailyQuests.claimedIds.includes(quest.id);
+                      const canClaim = !claimed && prog >= quest.target;
+                      const pct = Math.min(100, (prog / quest.target) * 100);
+                      return (
+                        <div
+                          key={quest.id}
+                          data-testid={`daily-quest-card-${quest.id}`}
+                          className={`p-4 rounded border flex flex-col justify-between gap-3 ${
+                            canClaim
+                              ? 'bg-[#1D152C] border-[#FACC15]'
+                              : claimed
+                                ? 'bg-[#10121B] border-[#26293A] opacity-75'
+                                : 'bg-[#12131D] border-[#26293A]'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h4 className="font-display text-sm font-bold text-[#F8FAFC]">
+                                {language === 'en' ? quest.titleEn : quest.titleId}
+                              </h4>
+                              <p className="text-xs text-[#94A3B8] mt-0.5">
+                                {language === 'en' ? quest.descEn : quest.descId}
+                              </p>
+                            </div>
+                            <span className="font-mono-num text-xs font-bold text-[#C084FC] whitespace-nowrap">
+                              {Math.min(prog, quest.target)}/{quest.target}
+                            </span>
+                          </div>
+
+                          <div className="h-2 w-full bg-[#191B28] rounded-sm overflow-hidden">
+                            <div
+                              className="h-full bg-[#A855F7]"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <span className="font-mono-num text-[11px] text-[#FACC15]">
+                              +{quest.rewardGems} Gems · +{quest.rewardGold}G · +{quest.rewardEssence} Essence
+                            </span>
+                            <button
+                              type="button"
+                              data-testid={`daily-quest-claim-${quest.id}`}
+                              disabled={!canClaim}
+                              onClick={() => onClaimDailyQuest(quest.id)}
+                              className="px-3.5 py-1.5 text-xs font-bold rounded bg-[#FACC15] hover:bg-[#FDE047] disabled:bg-[#1E2030] disabled:text-[#64748B] text-[#09090E] cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
+                            >
+                              {claimed ? t.dailyQuestClaimedBadge : t.dailyQuestClaimBtn}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* TAB 5: EVENT BANNER NOTIFICATIONS */}
           {tab === 'events' && (

@@ -13,9 +13,11 @@ import {
 } from 'lucide-react';
 import { getUiStrings } from '../game/i18n';
 import {
+  ALL_MOBILE_BUTTON_IDS,
   DEFAULT_KEYBINDINGS,
   DEFAULT_MOBILE_CONTROLS,
   formatKeyCodeLabel,
+  normalizeMobileControls,
 } from '../game/storage';
 import type {
   AudioSettings,
@@ -304,7 +306,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 type="button"
                 data-testid="reset-mobile-layout"
-                onClick={() => onChangeMobileControls({ ...DEFAULT_MOBILE_CONTROLS })}
+                onClick={() => onChangeMobileControls(normalizeMobileControls(DEFAULT_MOBILE_CONTROLS))}
                 className="shrink-0 flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded bg-[#181A28] hover:bg-[#23263A] text-[#FACC15] border border-[#2F3347] cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -333,7 +335,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1E2130]">
                 <div className="text-[11px] font-mono-num text-[#94A3B8]">
-                  D-Pad ({mobileControls.dpadOffsetX},{mobileControls.dpadOffsetY}) · Skill ({mobileControls.skillsOffsetX},{mobileControls.skillsOffsetY}) · Aksi ({mobileControls.actionOffsetX},{mobileControls.actionOffsetY})
+                  {language === 'en'
+                    ? `${ALL_MOBILE_BUTTON_IDS.length} Custom Buttons · Opacity ${normalizeMobileControls(mobileControls).opacity}%`
+                    : `${ALL_MOBILE_BUTTON_IDS.length} Tombol Kustom · Opasitas ${normalizeMobileControls(mobileControls).opacity}%`}
                 </div>
                 <button
                   type="button"

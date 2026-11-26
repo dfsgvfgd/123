@@ -98,6 +98,25 @@ export const SkillFantasyIcon: React.FC<SkillIconProps> = ({
           />
         </svg>
       );
+    case 'luna_phantom_scythe':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path
+            d="M4 17C7 9 13 6 19.5 6.5C15.5 10 14 13.5 14.5 18.5"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+          />
+          <circle cx="17" cy="17" r="2.2" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+      );
+    case 'luna_abyssal_execution':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M12 3V19M6 9L12 16L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5 20H19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
     case 'lyra_fist_rush':
     case 'lyra_cyclone_kick':
     case 'lyra_aura_overdrive':
@@ -109,6 +128,33 @@ export const SkillFantasyIcon: React.FC<SkillIconProps> = ({
             strokeWidth="1.7"
             strokeLinejoin="round"
           />
+        </svg>
+      );
+    case 'lyra_earthshaker_slam':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M12 4V14M7 10L12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4 19L8 16.5L12 19L16 16.5L20 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'lyra_phoenix_uppercut':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M12 20V5M6.5 10.5L12 4.5L17.5 10.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5 16.5C8 14.5 16 14.5 19 16.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      );
+    case 'witch_arcane_lightning':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <path d="M13 3L6 13H12L10.5 21L18 11H12L13 3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'witch_chrono_nova':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5" stroke="currentColor" strokeWidth="1.7" />
+          <path d="M12 7.5V12L15.5 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case 'witch_raven_arcana':
@@ -356,27 +402,75 @@ export const LobbyBagSatchelIcon: React.FC<{ className?: string }> = ({
   </svg>
 );
 
+export const LobbyEventBellIcon: React.FC<{ className?: string }> = ({
+  className = 'w-5 h-5',
+}) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <path
+      d="M12 3.5V5M7.5 10.5A4.5 4.5 0 0 1 16.5 10.5C16.5 14 18 15.8 19.2 17H4.8C6 15.8 7.5 14 7.5 10.5Z"
+      fill="currentColor"
+      fillOpacity="0.16"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    />
+    <path d="M10 17.5A2 2 0 0 0 14 17.5" stroke="#FEF08A" strokeWidth="1.6" strokeLinecap="round" />
+    <circle cx="17.8" cy="6.2" r="1.4" fill="#FACC15" />
+  </svg>
+);
+
+export const LobbyDailyCalendarIcon: React.FC<{ className?: string }> = ({
+  className = 'w-5 h-5',
+}) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+    <rect
+      x="4.5"
+      y="5.5"
+      width="15"
+      height="14.5"
+      rx="2"
+      fill="currentColor"
+      fillOpacity="0.16"
+      stroke="currentColor"
+      strokeWidth="1.7"
+    />
+    <path d="M8.5 3.5V6.8M15.5 3.5V6.8M4.5 10H19.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    <path
+      d="M9.5 14.5L11.3 16.3L15 12.6"
+      stroke="#FEF08A"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export function compactSkillRoleLabel(roleLabel: string): string {
   const map: Record<string, string> = {
     'Sabit · Lifesteal': 'Lifesteal',
     'Dash Tebas': 'Dash Tebas',
     'AoE Gerhana': 'Gerhana',
+    'Sabit Bumerang': 'Bumerang',
+    'Eksekusi Sabit': 'Eksekusi',
     'Dash Pukulan': 'Pukulan',
     'AoE Tendang': 'Tendang',
     'Buff · AoE': 'Overdrive',
+    'Hantam Tanah': 'Hantaman',
+    'Uppercut Api': 'Uppercut',
     'AoE Hujan': 'Hujan AoE',
     'Hisap Blink': 'Vortex',
+    'Rantai Petir': 'Petir',
+    'Nova · Heal': 'Chrono',
   };
   return map[roleLabel] ?? roleLabel;
 }
 
 interface StoneActionButtonProps {
   onClick: () => void;
-  onTouchStart?: (e: React.TouchEvent<HTMLButtonElement>) => void;
-  onTouchEnd?: (e: React.TouchEvent<HTMLButtonElement>) => void;
-  onMouseDown?: () => void;
-  onMouseUp?: () => void;
-  onMouseLeave?: () => void;
+  onPressStart?: () => void;
+  onPressEnd?: () => void;
+  fireOnPointerDown?: boolean;
   ariaLabel: string;
   title?: string;
   accentHex: string;
@@ -387,20 +481,20 @@ interface StoneActionButtonProps {
   subBadge?: string;
   roleLabel: string;
   size?: 'sm' | 'md';
+  controlClass?: string;
+  wrapperStyle?: React.CSSProperties;
   children: React.ReactNode;
 }
 
 /**
- * Beveled dark forged-stone & iron action control button with crisp Ready / Cooldown / Locked states.
- * Uses solid/gradient stone surfaces (no backdrop-blur over canvas).
+ * Beveled dark forged-stone & iron action control button with multi-touch PointerEvent tracking,
+ * crisp Ready / Cooldown / Locked states, and optional per-button scale/offset styling.
  */
 export const StoneActionButton: React.FC<StoneActionButtonProps> = ({
   onClick,
-  onTouchStart,
-  onTouchEnd,
-  onMouseDown,
-  onMouseUp,
-  onMouseLeave,
+  onPressStart,
+  onPressEnd,
+  fireOnPointerDown = false,
   ariaLabel,
   title,
   accentHex,
@@ -411,8 +505,14 @@ export const StoneActionButton: React.FC<StoneActionButtonProps> = ({
   subBadge,
   roleLabel,
   size = 'md',
+  controlClass = '',
+  wrapperStyle,
   children,
 }) => {
+  const [pressed, setPressed] = React.useState(false);
+  const activePointerIdRef = React.useRef<number | null>(null);
+  const pointerTriggeredRef = React.useRef(false);
+
   const isReady = state === 'ready';
   const isCooldown = state === 'cooldown';
   const isLocked = state === 'locked';
@@ -423,33 +523,69 @@ export const StoneActionButton: React.FC<StoneActionButtonProps> = ({
   const boxSize = size === 'sm' ? 'w-11 h-11' : 'w-13 h-13 sm:w-14 sm:h-14';
   const labelWidth = size === 'sm' ? 'max-w-[66px]' : 'max-w-[78px]';
 
+  const releasePointer = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
+    activePointerIdRef.current = null;
+    setPressed(false);
+    onPressEnd?.();
+  };
+
   return (
-    <div className="flex flex-col items-center gap-1 select-none">
+    <div
+      className="flex flex-col items-center gap-0.5 select-none"
+      style={wrapperStyle}
+    >
       <button
         type="button"
         tabIndex={-1}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onMouseDown={onMouseDown}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseLeave}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // Synthetic events may not support capture
+          }
+          activePointerIdRef.current = e.pointerId;
+          setPressed(true);
+          if (onPressStart) {
+            pointerTriggeredRef.current = true;
+            onPressStart();
+          } else if (fireOnPointerDown) {
+            pointerTriggeredRef.current = true;
+            onClick();
+          }
+        }}
+        onPointerUp={releasePointer}
+        onPointerCancel={releasePointer}
+        onContextMenu={(e) => e.preventDefault()}
         onClick={(e) => {
           e.currentTarget.blur();
+          if (pointerTriggeredRef.current) {
+            pointerTriggeredRef.current = false;
+            return;
+          }
           onClick();
         }}
         title={title ?? ariaLabel}
         aria-label={ariaLabel}
-        className={`relative ${boxSize} rounded-[5px] border-2 flex flex-col items-center justify-center overflow-hidden transition-transform active:scale-95 cursor-pointer`}
+        className={`mobile-control-btn ${controlClass} relative ${boxSize} rounded-[7px] border-2 flex flex-col items-center justify-center overflow-hidden transition-transform cursor-pointer ${
+          pressed ? 'scale-92' : 'active:scale-95'
+        }`}
         style={{
-          background: isReady
-            ? 'linear-gradient(180deg, #25283D 0%, #151724 55%, #0D0E16 100%)'
-            : isCooldown
-              ? 'linear-gradient(180deg, #131520 0%, #090A10 100%)'
-              : 'linear-gradient(180deg, #101119 0%, #07080D 100%)',
-          borderColor: isReady ? accentHex : isCooldown ? '#474D66' : '#262938',
-          boxShadow: isReady
-            ? `inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.7), 0 0 10px ${accentHex}40`
-            : 'inset 0 2px 4px rgba(0,0,0,0.85)',
+          background: pressed
+            ? 'linear-gradient(180deg, rgba(48,38,76,0.92) 0%, rgba(22,19,36,0.95) 100%)'
+            : isReady
+              ? 'linear-gradient(180deg, rgba(37,40,61,0.86) 0%, rgba(21,23,36,0.88) 55%, rgba(13,14,22,0.92) 100%)'
+              : isCooldown
+                ? 'linear-gradient(180deg, rgba(19,21,32,0.82) 0%, rgba(9,10,16,0.88) 100%)'
+                : 'linear-gradient(180deg, rgba(16,17,25,0.78) 0%, rgba(7,8,13,0.85) 100%)',
+          borderColor: pressed ? '#FACC15' : isReady ? accentHex : isCooldown ? '#474D66' : '#262938',
+          boxShadow: pressed
+            ? `inset 0 0 10px ${accentHex}66, 0 0 14px rgba(250, 204, 21, 0.5)`
+            : isReady
+              ? `inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.7), 0 0 10px ${accentHex}40`
+              : 'inset 0 2px 4px rgba(0,0,0,0.85)',
         }}
       >
         {/* Corner Forged Iron Rivets */}

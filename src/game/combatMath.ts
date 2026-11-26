@@ -8,13 +8,52 @@ import {
   WEAPON_ENCHANTS,
   WITCH_WEAPON_STYLES,
 } from './progression';
-import type { AnySkillId, RunInventoryEntry, RunSubSkillEntry, SaveData } from './types';
+import type { AnySkillId, CharacterId, RunInventoryEntry, RunSubSkillEntry, SaveData } from './types';
 
 /**
- * Re-calibrated damage multiplier so Lv.1 attacks (~1,800-2,400 dmg) tear cleanly through
- * 10,000 HP regular monsters and challenge 99,999 HP bosses without changing Lv.1 maxHp = 100.
+ * Re-calibrated damage multiplier so Lv.1 skills remain effective against
+ * 10,000 HP regular monsters and 99,999 HP bosses without changing Lv.1 maxHp = 100.
  */
 export const COMBAT_DAMAGE_SCALE = 58;
+export const ATK_PER_CHAR_LEVEL = 1;
+
+/**
+ * Basic attack ratio scales Lv.1 basic slashes/strikes/bolts into the tens-to-hundreds
+ * range (~45-430 dmg, never thousands at Lv.1) while growing smoothly from Lv.1 to Lv.50.
+ */
+export const BASIC_ATTACK_DAMAGE_RATIO = 0.085;
+
+export function getCharacterBasicAttackFactor(characterId?: CharacterId): number {
+  switch (characterId) {
+    case 'lyra':
+      return 0.62;
+    case 'witch':
+      return 0.66;
+    case 'velvera':
+      return 0.84;
+    case 'luna':
+      return 1.04;
+    default:
+      return 0.84;
+  }
+}
+
+export function getBasicAttackComboMultiplier(
+  characterId: CharacterId | undefined,
+  comboStep: number
+): number {
+  const step = Math.max(1, Math.min(3, Math.floor(comboStep || 1)));
+  if (characterId === 'lyra') {
+    return step === 3 ? 1.38 : step === 2 ? 0.92 : 0.72;
+  }
+  if (characterId === 'witch') {
+    return step === 3 ? 1.28 : step === 2 ? 0.96 : 0.78;
+  }
+  if (characterId === 'luna') {
+    return step === 3 ? 1.52 : step === 2 ? 1.1 : 0.84;
+  }
+  return step === 3 ? 1.45 : step === 2 ? 1.04 : 0.8;
+}
 
 export interface DerivedPlayerStats {
   maxHp: number;
@@ -108,7 +147,7 @@ export function computePlayerStats(
 
   const baseAtk =
     20 +
-    (charLv - 1) * 4 +
+    (charLv - 1) * ATK_PER_CHAR_LEVEL +
     activeWeapon.atkBonus +
     forgeBonusAtk +
     precisionLv * 5 +
@@ -178,12 +217,16 @@ export function calculateSlashDamage(
   stats: DerivedPlayerStats,
   comboMultiplier: number,
   rng: () => number = Math.random,
-  extraDamageMult = 1
+  extraDamageMult = 1,
+  characterId?: CharacterId
 ): { damage: number; isCrit: boolean } {
   const isCrit = rng() < stats.critChance;
   const variance = 0.94 + rng() * 0.12;
+  const charFactor = getCharacterBasicAttackFactor(characterId);
   const raw =
     stats.attack *
+    BASIC_ATTACK_DAMAGE_RATIO *
+    charFactor *
     comboMultiplier *
     extraDamageMult *
     variance *

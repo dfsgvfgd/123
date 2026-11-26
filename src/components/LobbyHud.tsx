@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { Coins, Gem } from 'lucide-react';
 import { getUiStrings } from '../game/i18n';
 import { ACTIVE_SKILLS, CHARACTER_ROSTER } from '../game/progression';
-import { formatKeyCodeLabel } from '../game/storage';
+import { formatKeyCodeLabel, normalizeMobileControls } from '../game/storage';
 import type {
   ActiveSkillId,
   HudSnapshot,
   LanguageCode,
   LobbyInteractableKind,
+  MobileControlButtonId,
   SaveData,
 } from '../game/types';
 import { CleanPortrait } from './CleanPortrait';
@@ -17,12 +18,14 @@ import {
   JumpFantasyIcon,
   LobbyBagSatchelIcon,
   LobbyCharacterEmblemIcon,
+  LobbyDailyCalendarIcon,
+  LobbyEventBellIcon,
   LobbyGachaPortalIcon,
   LobbySettingsRuneIcon,
   SkillFantasyIcon,
   StoneActionButton,
 } from './FantasyActionUi';
-import type { SanctumTab } from './SanctumModal';
+import type { SanctumScope, SanctumTab } from './SanctumModal';
 
 interface LobbyHudProps {
   hud: HudSnapshot;
@@ -32,7 +35,7 @@ interface LobbyHudProps {
   dailyClaimable: boolean;
   showTouchControls: boolean;
   onOpenSettings: () => void;
-  onOpenSanctum: (tab: SanctumTab) => void;
+  onOpenSanctum: (tab: SanctumTab, scope?: SanctumScope) => void;
   onOpenInventory: () => void;
   onTouchMove: (dir: -1 | 0 | 1) => void;
   onTouchDown: (active: boolean) => void;
@@ -113,10 +116,40 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
 }) => {
   const lang = save.language ?? 'id';
   const t = getUiStrings(lang);
-  const mc = save.mobileControls;
-  const touchOpacity = Math.max(0.25, Math.min(1, (mc?.opacity ?? 90) / 100));
+  const mc = normalizeMobileControls(save.mobileControls);
 
-  const charMeta = CHARACTER_ROSTER[save.selectedCharacter] ?? CHARACTER_ROSTER.luna;
+  const leftPointersRef = useRef<Set<number>>(new Set());
+  const rightPointersRef = useRef<Set<number>>(new Set());
+  const downPointersRef = useRef<Set<number>>(new Set());
+  const [dpadPressed, setDpadPressed] = useState<{ left: boolean; down: boolean; right: boolean }>({
+    left: false,
+    down: false,
+    right: false,
+  });
+
+  const syncMoveDirection = () => {
+    const hasL = leftPointersRef.current.size > 0;
+    const hasR = rightPointersRef.current.size > 0;
+    setDpadPressed({
+      left: hasL,
+      down: downPointersRef.current.size > 0,
+      right: hasR,
+    });
+    if (hasL && !hasR) onTouchMove(-1);
+    else if (hasR && !hasL) onTouchMove(1);
+    else onTouchMove(0);
+  };
+
+  const getBtnStyle = (id: MobileControlButtonId): React.CSSProperties => {
+    const cfg = mc.buttons[id];
+    return {
+      opacity: Math.max(0.3, Math.min(1, cfg.opacity / 100)),
+      transform: `translate(${cfg.offsetX}px, ${cfg.offsetY}px) scale(${cfg.scale})`,
+      transformOrigin: 'center center',
+    };
+  };
+
+  const charMeta = CHARACTER_ROSTER[save.selectedCharacter] ?? CHARACTER_ROSTER.velvera;
   const isLuna = save.selectedCharacter === 'luna';
   const isLyra = save.selectedCharacter === 'lyra';
   const isWitch = save.selectedCharacter === 'witch';
@@ -130,8 +163,8 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
   const interactKey = formatKeyCodeLabel(kb.interact);
 
   const showDummyBar = hud.dummyMaxHit > 0 || hud.dummyLastHit > 0 || hud.dummyDps > 0;
-  const hasCharacterAlert = unreadEvents > 0;
-  const hasGachaAlert = dailyClaimable;
+  const hasEventAlert = unreadEvents > 0;
+  const hasDailyAlert = dailyClaimable;
 
   return (
     <div className="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between safe-hud-inset sm:p-4">
@@ -194,16 +227,41 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
           </button>
         </div>
 
-        {/* Top-Right Cluster: Compact 2x2 Dark Fantasy Icon-Only Grid (Zero Text Labels) */}
+        {/* Top-Right Cluster: Compact 2x3 Dark Fantasy Icon Grid (Event beside Karakter, Harian beside Gacha) */}
         <div
           data-testid="lobby-top-right-grid"
-          className="pointer-events-auto grid grid-cols-2 gap-1.5 shrink-0"
+          className="pointer-events-auto grid grid-cols-3 gap-1.5 shrink-0"
         >
-          {/* Row 1 Left: Character / Sanctum (Skills, Hero Switch, Weapons, Daily, Events) */}
+          {/* Row 1 Col 1: Event (directly beside Character) */}
+          <button
+            type="button"
+            data-testid="lobby-event-btn"
+            onClick={() => onOpenSanctum('events', 'events')}
+            aria-label={t.lobbyEventBtn}
+            title={t.lobbyEventBtn}
+            className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-[6px] border-2 border-[#8A7656]/85 hover:border-[#FACC15] flex items-center justify-center text-[#FACC15] transition-transform active:scale-95 cursor-pointer"
+            style={{
+              ...FORGED_ICON_BTN_BASE,
+              boxShadow:
+                'inset 0 1px 0 rgba(254,240,138,0.16), inset 0 -2px 0 rgba(0,0,0,0.72), 0 4px 12px rgba(0,0,0,0.55)',
+            }}
+          >
+            <span aria-hidden="true" className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#D4B475]/80" />
+            <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#D4B475]/80" />
+            {hasEventAlert && (
+              <span
+                aria-hidden="true"
+                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#FACC15] border border-[#09090E]"
+              />
+            )}
+            <LobbyEventBellIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
+
+          {/* Row 1 Col 2: Character (Skills, Hero Switch, Passives) */}
           <button
             type="button"
             data-testid="lobby-character-btn"
-            onClick={() => onOpenSanctum('skills')}
+            onClick={() => onOpenSanctum('skills', 'character')}
             aria-label={t.lobbyCharacterBtn}
             title={t.lobbyCharacterBtn}
             className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-[6px] border-2 border-[#7E22CE]/80 hover:border-[#C084FC] flex items-center justify-center text-[#C084FC] transition-transform active:scale-95 cursor-pointer"
@@ -213,24 +271,12 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
                 'inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -2px 0 rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.55)',
             }}
           >
-            <span
-              aria-hidden="true"
-              className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#D4B475]/80"
-            />
-            <span
-              aria-hidden="true"
-              className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#D4B475]/80"
-            />
-            {hasCharacterAlert && (
-              <span
-                aria-hidden="true"
-                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#FACC15] border border-[#09090E]"
-              />
-            )}
+            <span aria-hidden="true" className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#D4B475]/80" />
+            <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#D4B475]/80" />
             <LobbyCharacterEmblemIcon className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
-          {/* Row 1 Right: Settings */}
+          {/* Row 1 Col 3: Settings */}
           <button
             type="button"
             data-testid="lobby-settings-btn"
@@ -244,22 +290,41 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
                 'inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -2px 0 rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.55)',
             }}
           >
-            <span
-              aria-hidden="true"
-              className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#64748B]"
-            />
-            <span
-              aria-hidden="true"
-              className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#64748B]"
-            />
+            <span aria-hidden="true" className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#64748B]" />
+            <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#64748B]" />
             <LobbySettingsRuneIcon className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
-          {/* Row 2 Left: Gacha */}
+          {/* Row 2 Col 1: Daily (directly beside Gacha) */}
+          <button
+            type="button"
+            data-testid="lobby-daily-btn"
+            onClick={() => onOpenSanctum('daily', 'daily')}
+            aria-label={t.lobbyDailyBtn}
+            title={t.lobbyDailyBtn}
+            className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-[6px] border-2 border-[#38BDF8]/75 hover:border-[#7DD3FC] flex items-center justify-center text-[#38BDF8] transition-transform active:scale-95 cursor-pointer"
+            style={{
+              ...FORGED_ICON_BTN_BASE,
+              boxShadow:
+                'inset 0 1px 0 rgba(186,230,253,0.16), inset 0 -2px 0 rgba(0,0,0,0.72), 0 4px 12px rgba(0,0,0,0.55)',
+            }}
+          >
+            <span aria-hidden="true" className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#38BDF8]/80" />
+            <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#38BDF8]/80" />
+            {hasDailyAlert && (
+              <span
+                aria-hidden="true"
+                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#FACC15] border border-[#09090E]"
+              />
+            )}
+            <LobbyDailyCalendarIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
+
+          {/* Row 2 Col 2: Gacha */}
           <button
             type="button"
             data-testid="lobby-gacha-btn"
-            onClick={() => onOpenSanctum('gacha')}
+            onClick={() => onOpenSanctum('gacha', 'gacha')}
             aria-label={t.lobbyGachaBtn}
             title={t.lobbyGachaBtn}
             className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-[6px] border-2 border-[#9333EA]/85 hover:border-[#E879F9] flex items-center justify-center text-[#D8B4FE] transition-transform active:scale-95 cursor-pointer"
@@ -269,24 +334,12 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
                 'inset 0 1px 0 rgba(233,213,255,0.2), inset 0 -2px 0 rgba(0,0,0,0.75), 0 0 12px rgba(147,51,234,0.35)',
             }}
           >
-            <span
-              aria-hidden="true"
-              className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#C084FC]"
-            />
-            <span
-              aria-hidden="true"
-              className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#C084FC]"
-            />
-            {hasGachaAlert && (
-              <span
-                aria-hidden="true"
-                className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#FACC15] border border-[#09090E]"
-              />
-            )}
+            <span aria-hidden="true" className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#C084FC]" />
+            <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#C084FC]" />
             <LobbyGachaPortalIcon className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
-          {/* Row 2 Right: Bag / Tas */}
+          {/* Row 2 Col 3: Bag / Tas */}
           <button
             type="button"
             data-testid="lobby-bag-btn"
@@ -300,14 +353,8 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
                 'inset 0 1px 0 rgba(254,240,138,0.14), inset 0 -2px 0 rgba(0,0,0,0.72), 0 4px 12px rgba(0,0,0,0.55)',
             }}
           >
-            <span
-              aria-hidden="true"
-              className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#D4B475]"
-            />
-            <span
-              aria-hidden="true"
-              className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#D4B475]"
-            />
+            <span aria-hidden="true" className="absolute top-0.5 left-0.5 w-1 h-1 rounded-xs bg-[#D4B475]" />
+            <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-xs bg-[#D4B475]" />
             <LobbyBagSatchelIcon className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
@@ -335,72 +382,121 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
         )}
       </div>
 
-      {/* Bottom Controls: Forged Dark-Stone Controls (Auto-Attack: NO manual Serang button) */}
+      {/* Bottom Controls: Forged Semi-Transparent Multi-Touch Dark-Fantasy Controls */}
       {showTouchControls ? (
         <div className="flex items-end justify-between w-full gap-2">
-          {/* Left Stone D-Pad */}
+          {/* Left Stone D-Pad (Multi-Touch PointerEvents) */}
           <div
             data-testid="lobby-touch-dpad"
-            className="pointer-events-auto flex items-center gap-1.5"
-            style={{
-              opacity: touchOpacity,
-              transform: `translate(${mc?.dpadOffsetX ?? 0}px, ${mc?.dpadOffsetY ?? 0}px)`,
-            }}
+            className="pointer-events-auto flex items-center gap-2"
           >
             <button
               type="button"
-              onTouchStart={(e) => {
+              tabIndex={-1}
+              data-testid="lobby-dpad-left"
+              onPointerDown={(e) => {
                 e.preventDefault();
-                onTouchMove(-1);
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                leftPointersRef.current.add(e.pointerId);
+                syncMoveDirection();
               }}
-              onTouchEnd={() => onTouchMove(0)}
-              onMouseDown={() => onTouchMove(-1)}
-              onMouseUp={() => onTouchMove(0)}
-              onMouseLeave={() => onTouchMove(0)}
+              onPointerUp={(e) => {
+                leftPointersRef.current.delete(e.pointerId);
+                syncMoveDirection();
+              }}
+              onPointerCancel={(e) => {
+                leftPointersRef.current.delete(e.pointerId);
+                syncMoveDirection();
+              }}
+              onContextMenu={(e) => e.preventDefault()}
               aria-label={lang === 'en' ? 'Move Left' : 'Gerak Kiri'}
-              className="w-11 h-11 rounded-[6px] bg-[#161824] border-2 border-[#6B5B45] text-[#F8FAFC] font-bold text-base"
+              className={`mobile-dpad-btn w-12 h-12 rounded-[8px] border-2 font-bold text-lg flex items-center justify-center transition-transform ${
+                dpadPressed.left
+                  ? 'border-[#FACC15] bg-[#2D1A44]/90 text-[#FEF08A] scale-95 shadow-[0_0_12px_rgba(250,204,21,0.45)]'
+                  : 'border-[#6B5B45]/90 bg-[#141624]/82 text-[#F8FAFC]'
+              }`}
+              style={getBtnStyle('left')}
             >
               ◀
             </button>
             <button
               type="button"
-              onTouchStart={(e) => {
+              tabIndex={-1}
+              data-testid="lobby-dpad-down"
+              onPointerDown={(e) => {
                 e.preventDefault();
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                downPointersRef.current.add(e.pointerId);
+                setDpadPressed((p) => ({ ...p, down: true }));
                 onTouchDown(true);
               }}
-              onTouchEnd={() => onTouchDown(false)}
-              onMouseDown={() => onTouchDown(true)}
-              onMouseUp={() => onTouchDown(false)}
-              onMouseLeave={() => onTouchDown(false)}
+              onPointerUp={(e) => {
+                downPointersRef.current.delete(e.pointerId);
+                const active = downPointersRef.current.size > 0;
+                setDpadPressed((p) => ({ ...p, down: active }));
+                onTouchDown(active);
+              }}
+              onPointerCancel={(e) => {
+                downPointersRef.current.delete(e.pointerId);
+                const active = downPointersRef.current.size > 0;
+                setDpadPressed((p) => ({ ...p, down: active }));
+                onTouchDown(active);
+              }}
+              onContextMenu={(e) => e.preventDefault()}
               aria-label={lang === 'en' ? 'Drop Down' : 'Turun'}
-              className="w-11 h-11 rounded-[6px] bg-[#161824] border-2 border-[#6B5B45] text-[#F8FAFC] font-bold text-base"
+              className={`mobile-dpad-btn w-12 h-12 rounded-[8px] border-2 font-bold text-lg flex items-center justify-center transition-transform ${
+                dpadPressed.down
+                  ? 'border-[#FACC15] bg-[#2D1A44]/90 text-[#FEF08A] scale-95 shadow-[0_0_12px_rgba(250,204,21,0.45)]'
+                  : 'border-[#6B5B45]/90 bg-[#141624]/82 text-[#CBD5E1]'
+              }`}
+              style={getBtnStyle('down')}
             >
               ▼
             </button>
             <button
               type="button"
-              onTouchStart={(e) => {
+              tabIndex={-1}
+              data-testid="lobby-dpad-right"
+              onPointerDown={(e) => {
                 e.preventDefault();
-                onTouchMove(1);
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+                rightPointersRef.current.add(e.pointerId);
+                syncMoveDirection();
               }}
-              onTouchEnd={() => onTouchMove(0)}
-              onMouseDown={() => onTouchMove(1)}
-              onMouseUp={() => onTouchMove(0)}
-              onMouseLeave={() => onTouchMove(0)}
+              onPointerUp={(e) => {
+                rightPointersRef.current.delete(e.pointerId);
+                syncMoveDirection();
+              }}
+              onPointerCancel={(e) => {
+                rightPointersRef.current.delete(e.pointerId);
+                syncMoveDirection();
+              }}
+              onContextMenu={(e) => e.preventDefault()}
               aria-label={lang === 'en' ? 'Move Right' : 'Gerak Kanan'}
-              className="w-11 h-11 rounded-[6px] bg-[#161824] border-2 border-[#6B5B45] text-[#F8FAFC] font-bold text-base"
+              className={`mobile-dpad-btn w-12 h-12 rounded-[8px] border-2 font-bold text-lg flex items-center justify-center transition-transform ${
+                dpadPressed.right
+                  ? 'border-[#FACC15] bg-[#2D1A44]/90 text-[#FEF08A] scale-95 shadow-[0_0_12px_rgba(250,204,21,0.45)]'
+                  : 'border-[#6B5B45]/90 bg-[#141624]/82 text-[#F8FAFC]'
+              }`}
+              style={getBtnStyle('right')}
             >
               ▶
             </button>
           </div>
 
-          {/* Right: Skills + Dash/Jump/Interact (NO Serang button) */}
+          {/* Right: Skills + Dash + Jump + Interact */}
           <div className="pointer-events-auto flex flex-col items-end gap-1.5">
             {hud.nearLobbyObject && hud.nearLobbyObject !== 'training_dummy' && (
               <button
                 type="button"
-                onClick={onTouchInteract}
-                className="px-3.5 h-9 rounded-[5px] bg-[#FACC15] border-2 border-[#FEF08A] text-[#09090E] font-bold text-[11px]"
+                tabIndex={-1}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  onTouchInteract();
+                }}
+                onContextMenu={(e) => e.preventDefault()}
+                style={getBtnStyle('interact')}
+                className="mobile-interact-btn px-3.5 h-9 rounded-[6px] bg-[#FACC15] border-2 border-[#FEF08A] text-[#09090E] font-bold text-[11px] shadow-lg"
               >
                 {hud.nearLobbyObject === 'weapon_shop'
                   ? lang === 'en'
@@ -412,21 +508,20 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
 
             <div
               data-testid="lobby-touch-skills"
-              className="flex items-start gap-1.5 flex-nowrap justify-end"
-              style={{
-                opacity: touchOpacity,
-                transform: `translate(${mc?.skillsOffsetX ?? 0}px, ${mc?.skillsOffsetY ?? 0}px)`,
-              }}
+              className="flex items-start gap-2 flex-nowrap justify-end"
             >
               {equippedSkills.map((skillId, idx) => {
                 const def = ACTIVE_SKILLS[skillId];
                 const cd = hud.skillCooldowns[idx];
                 const maxCd = hud.skillMaxCooldowns[idx] ?? def.cooldown;
                 const state = cd > 0 ? 'cooldown' : hud.mp < def.mpCost ? 'locked' : 'ready';
+                const btnId = (`skill${idx + 1}`) as MobileControlButtonId;
                 return (
                   <StoneActionButton
                     key={`${skillId}-${idx}`}
                     size="sm"
+                    controlClass="mobile-skill-btn"
+                    fireOnPointerDown
                     onClick={() => onTouchSkill(idx as 0 | 1 | 2)}
                     ariaLabel={`Skill ${idx + 1}: ${def.name} (${def.roleLabel})`}
                     accentHex={def.accentHex}
@@ -436,6 +531,7 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
                     keyBadge={`${idx + 1}`}
                     subBadge={`${def.mpCost}`}
                     roleLabel={compactSkillRoleLabel(def.roleLabel)}
+                    wrapperStyle={getBtnStyle(btnId)}
                   >
                     <SkillFantasyIcon skillId={skillId} className="w-4 h-4" />
                   </StoneActionButton>
@@ -445,14 +541,12 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
 
             <div
               data-testid="lobby-touch-action"
-              className="flex items-start gap-1.5"
-              style={{
-                opacity: touchOpacity,
-                transform: `translate(${mc?.actionOffsetX ?? 0}px, ${mc?.actionOffsetY ?? 0}px)`,
-              }}
+              className="flex items-start gap-2"
             >
               <StoneActionButton
                 size="sm"
+                controlClass="mobile-dash-btn"
+                fireOnPointerDown
                 onClick={onTouchDash}
                 ariaLabel={t.dash}
                 accentHex="#B09567"
@@ -460,24 +554,22 @@ export const LobbyHud: React.FC<LobbyHudProps> = ({
                 cooldownSec={hud.dashCooldown}
                 maxCooldownSec={1.4}
                 roleLabel={t.dash}
+                wrapperStyle={getBtnStyle('dash')}
               >
                 <DashFantasyIcon className="w-4 h-4" />
               </StoneActionButton>
 
               <StoneActionButton
                 size="sm"
+                controlClass="mobile-jump-btn"
                 onClick={onTouchJumpStart}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  onTouchJumpStart();
-                }}
-                onTouchEnd={onTouchJumpEnd}
-                onMouseDown={onTouchJumpStart}
-                onMouseUp={onTouchJumpEnd}
+                onPressStart={onTouchJumpStart}
+                onPressEnd={onTouchJumpEnd}
                 ariaLabel={t.jump}
                 accentHex="#38BDF8"
                 state="ready"
                 roleLabel={t.jump}
+                wrapperStyle={getBtnStyle('jump')}
               >
                 <JumpFantasyIcon className="w-4 h-4" />
               </StoneActionButton>

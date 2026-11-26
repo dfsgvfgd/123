@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Coins, Moon, ShoppingBag, Sparkles, Swords, Wand2, X } from 'lucide-react';
+import { Check, Coins, Lock, Moon, ShoppingBag, Sparkles, Swords, Wand2, X } from 'lucide-react';
 import { getUiStrings } from '../game/i18n';
+import { isCharacterUnlocked } from '../game/storage';
 import {
   BLADE_STYLES,
   CHARACTER_ROSTER,
@@ -47,7 +48,7 @@ export const WeaponShopModal: React.FC<WeaponShopModalProps> = ({
   onSelectCharacter,
 }) => {
   const t = getUiStrings(language);
-  const [activeTab, setActiveTab] = useState<CharacterId>(save.selectedCharacter ?? 'luna');
+  const [activeTab, setActiveTab] = useState<CharacterId>(save.selectedCharacter ?? 'velvera');
   const [hoveredLuna, setHoveredLuna] = useState<ScytheWeaponId | null>(null);
   const [hoveredVelvera, setHoveredVelvera] = useState<BladeStyleId | null>(null);
   const [hoveredLyra, setHoveredLyra] = useState<LyraWeaponId | null>(null);
@@ -57,7 +58,7 @@ export const WeaponShopModal: React.FC<WeaponShopModalProps> = ({
 
   useEffect(() => {
     if (open) {
-      setActiveTab(save.selectedCharacter ?? 'luna');
+      setActiveTab(save.selectedCharacter ?? 'velvera');
       setHoveredLuna(null);
       setHoveredVelvera(null);
       setHoveredLyra(null);
@@ -371,13 +372,20 @@ export const WeaponShopModal: React.FC<WeaponShopModalProps> = ({
           </div>
 
           {save.selectedCharacter !== activeTab && (
-            <button
-              type="button"
-              onClick={() => onSelectCharacter(activeTab)}
-              className="px-3 py-1.5 text-[11px] font-bold rounded bg-[#181A28] hover:bg-[#24273A] text-[#FACC15] border border-[#8A7656]/60 cursor-pointer"
-            >
-              Pakai {charMeta.name}
-            </button>
+            isCharacterUnlocked(save, activeTab) ? (
+              <button
+                type="button"
+                onClick={() => onSelectCharacter(activeTab)}
+                className="px-3 py-1.5 text-[11px] font-bold rounded bg-[#181A28] hover:bg-[#24273A] text-[#FACC15] border border-[#8A7656]/60 cursor-pointer"
+              >
+                Pakai {charMeta.name}
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded bg-[#141621] text-[#94A3B8] border border-[#2A2D3D]">
+                <Lock className="w-3 h-3 text-[#FACC15]" />
+                {t.heroLockedBadge}
+              </span>
+            )
           )}
         </div>
 

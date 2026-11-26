@@ -70,6 +70,8 @@ export type ActiveSkillId =
   | 'luna_soul_harvest'
   | 'luna_umbral_rush'
   | 'luna_lunar_eclipse'
+  | 'luna_phantom_scythe'
+  | 'luna_abyssal_execution'
   | 'void_tempest'
   | 'phantom_blink'
   | 'abyssal_crescent'
@@ -78,9 +80,13 @@ export type ActiveSkillId =
   | 'lyra_fist_rush'
   | 'lyra_cyclone_kick'
   | 'lyra_aura_overdrive'
+  | 'lyra_earthshaker_slam'
+  | 'lyra_phoenix_uppercut'
   | 'witch_raven_arcana'
   | 'witch_starfall_meteor'
-  | 'witch_void_vortex';
+  | 'witch_void_vortex'
+  | 'witch_arcane_lightning'
+  | 'witch_chrono_nova';
 
 export type SubSkillId =
   | 'sub_fireball'
@@ -312,6 +318,33 @@ export interface EventBannerNotice {
   isNew: boolean;
 }
 
+export type DailyQuestId =
+  | 'dq_kill_mobs'
+  | 'dq_clear_stages'
+  | 'dq_gacha_pulls'
+  | 'dq_open_chests';
+
+export type DailyQuestMetric = 'kills' | 'stagesCleared' | 'pulls' | 'chestsOpened';
+
+export interface DailyQuestDef {
+  id: DailyQuestId;
+  titleId: string;
+  titleEn: string;
+  descId: string;
+  descEn: string;
+  metric: DailyQuestMetric;
+  target: number;
+  rewardGems: number;
+  rewardGold: number;
+  rewardEssence: number;
+}
+
+export interface DailyQuestState {
+  dateKey: string;
+  progress: Record<DailyQuestMetric, number>;
+  claimedIds: DailyQuestId[];
+}
+
 export interface AudioSettings {
   masterVolume: number; // 0..100
   bgmVolume: number; // 0..100
@@ -319,14 +352,33 @@ export interface AudioSettings {
   muted: boolean;
 }
 
+export type MobileControlButtonId =
+  | 'left'
+  | 'down'
+  | 'right'
+  | 'jump'
+  | 'dash'
+  | 'skill1'
+  | 'skill2'
+  | 'skill3'
+  | 'interact';
+
+export interface MobileButtonConfig {
+  offsetX: number; // -320..320 px
+  offsetY: number; // -320..320 px
+  scale: number; // 0.5..2.0
+  opacity: number; // 30..100 %
+}
+
 export interface MobileControlsSettings {
-  opacity: number; // 0..100
-  dpadOffsetX: number; // -260..260 px
-  dpadOffsetY: number; // -260..260 px
-  actionOffsetX: number; // -260..260 px
-  actionOffsetY: number; // -260..260 px
-  skillsOffsetX: number; // -260..260 px
-  skillsOffsetY: number; // -260..260 px
+  opacity: number; // 30..100 global fallback
+  dpadOffsetX: number; // legacy group offset (-260..260 px)
+  dpadOffsetY: number;
+  actionOffsetX: number;
+  actionOffsetY: number;
+  skillsOffsetX: number;
+  skillsOffsetY: number;
+  buttons: Record<MobileControlButtonId, MobileButtonConfig>;
 }
 
 export type KeyActionId =
@@ -379,6 +431,7 @@ export interface SaveData {
     claimedDays: number[]; // e.g., [1, 2]
     lastClaimDate: string | null; // YYYY-MM-DD
   };
+  dailyQuests: DailyQuestState;
   seenEventIds: string[];
   claimedEventRewardIds: string[];
   characterLevel: number; // Starts at 1 (100 base HP)

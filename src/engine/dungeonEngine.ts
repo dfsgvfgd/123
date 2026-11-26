@@ -4,6 +4,7 @@ import {
   calculateSlashDamage,
   COMBAT_DAMAGE_SCALE,
   computePlayerStats,
+  getBasicAttackComboMultiplier,
   type DerivedPlayerStats,
 } from '../game/combatMath';
 import {
@@ -52,6 +53,7 @@ import {
   RUN_ITEMS,
   RUN_TEMP_BUFFS,
   shouldResetDummyMetrics,
+  shouldSpawnCatMerchant,
   STAGE_BOSS_NAMES,
   SUB_SKILLS,
   LUNA_SCYTHE_STYLES,
@@ -894,6 +896,9 @@ export class DungeonEngine {
     this.portalSpawnProgress = 1;
     this.mode = 'playing';
     this.clearHeldInputs();
+    this.jumpBuffer = 0;
+    this.slashBuffer = 0;
+    this.dashBuffer = 0;
     this.setupRoom(this.stage, this.subStage);
     this.emitHud(true);
     this.ensureLoopRunning();
@@ -977,8 +982,8 @@ export class DungeonEngine {
       opened: false,
     };
 
-    // Every 3rd stage (Stage 3, 6, 9), spawn the White Cat Merchant NPC in a safe corner
-    if (stage % 3 === 0) {
+    // Spawn the White Cat Merchant NPC every 3 rooms starting at 1-3 (1-3, 2-1, 2-4, 3-2, ...)
+    if (shouldSpawnCatMerchant(stage, subStage)) {
       this.catMerchant = {
         x: layout.catMerchantSpot.x,
         y: layout.catMerchantSpot.y,
@@ -1170,6 +1175,7 @@ export class DungeonEngine {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onWindowBlur);
+    window.addEventListener('dungeon:screen-shake', this.onExternalScreenShake);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     this.canvas.addEventListener('mousedown', this.onMouseDown);
 
@@ -1183,6 +1189,7 @@ export class DungeonEngine {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onWindowBlur);
+    window.removeEventListener('dungeon:screen-shake', this.onExternalScreenShake);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
     this.resizeObserver?.disconnect();
@@ -1197,6 +1204,15 @@ export class DungeonEngine {
 
   private onWindowBlur = (): void => {
     this.clearHeldInputs();
+  };
+
+  private onExternalScreenShake = (ev: Event): void => {
+    const customEv = ev as CustomEvent<{ intensity?: number }>;
+    const intensity =
+      typeof customEv.detail?.intensity === 'number'
+        ? Math.max(0.15, Math.min(1, customEv.detail.intensity))
+        : 0.5;
+    this.trauma = Math.min(1, Math.max(this.trauma, intensity));
   };
 
   private onVisibilityChange = (): void => {
@@ -2439,7 +2455,7 @@ export class DungeonEngine {
               : 62;
 
       const mult =
-        (this.comboStep === 3 ? 1.45 : this.comboStep === 2 ? 1.15 : 1.0) *
+        getBasicAttackComboMultiplier(this.save.selectedCharacter, this.comboStep) *
         (this.auraOverdriveTimer > 0 ? 1.2 : 1.0) *
         chainDmgMult;
 
@@ -2460,7 +2476,13 @@ export class DungeonEngine {
         this.pool.spawnBurst(cx + this.facing * 18, cy - 8, 9, [witchStyle.lanternGlow, '#FACC15', '#E9D5FF'], 55, 175, 4, true);
         const bolts = this.comboStep === 3 ? 2 : 1;
         for (let b = 0; b < bolts; b++) {
-          const { damage, isCrit } = calculateSlashDamage(this.stats, mult * (bolts > 1 ? 0.68 : 1.0));
+          const { damage, isCrit } = calculateSlashDamage(
+            this.stats,
+            mult * (bolts > 1 ? 0.68 : 1.0),
+            Math.random,
+            1,
+            this.save.selectedCharacter
+          );
           this.spawnProjectile({
             fromPlayer: true,
             x: cx + this.facing * 18,
@@ -2509,14 +2531,26 @@ export class DungeonEngine {
       for (const enemy of this.enemies) {
         if (enemy.state === 'ko') continue;
         if (aabbOverlap(hitBox, enemy)) {
-          const { damage, isCrit } = calculateSlashDamage(this.stats, isWitch ? mult * 0.45 : mult);
+          const { damage, isCrit } = calculateSlashDamage(
+            this.stats,
+            isWitch ? mult * 0.45 : mult,
+            Math.random,
+            1,
+            this.save.selectedCharacter
+          );
           this.damageEnemy(enemy, damage, isCrit, this.comboStep === 3 ? 280 : 140);
         }
       }
 
       const dummyBox = this.getTrainingDummyBox();
       if (dummyBox && aabbOverlap(hitBox, dummyBox)) {
-        const { damage, isCrit } = calculateSlashDamage(this.stats, isWitch ? mult * 0.45 : mult);
+        const { damage, isCrit } = calculateSlashDamage(
+          this.stats,
+          isWitch ? mult * 0.45 : mult,
+          Math.random,
+          1,
+          this.save.selectedCharacter
+        );
         this.damageTrainingDummy(damage, isCrit);
       }
     }
@@ -2558,9 +2592,18 @@ export class DungeonEngine {
     const animMeta: { style: 'sweep' | 'dash' | 'channel' | 'leap'; duration: number } =
       skillId === 'luna_umbral_rush' || skillId === 'phantom_blink' || skillId === 'lyra_fist_rush'
         ? { style: 'dash', duration: 0.36 }
-        : skillId === 'luna_soul_harvest' || skillId === 'witch_void_vortex' || skillId === 'lyra_aura_overdrive'
+        : skillId === 'luna_soul_harvest' ||
+            skillId === 'witch_void_vortex' ||
+            skillId === 'lyra_aura_overdrive' ||
+            skillId === 'witch_arcane_lightning' ||
+            skillId === 'witch_chrono_nova'
           ? { style: 'channel', duration: 0.42 }
-          : skillId === 'demon_eclipse' || skillId === 'lyra_cyclone_kick' || skillId === 'witch_starfall_meteor'
+          : skillId === 'demon_eclipse' ||
+              skillId === 'lyra_cyclone_kick' ||
+              skillId === 'witch_starfall_meteor' ||
+              skillId === 'luna_abyssal_execution' ||
+              skillId === 'lyra_earthshaker_slam' ||
+              skillId === 'lyra_phoenix_uppercut'
             ? { style: 'leap', duration: 0.40 }
             : { style: 'sweep', duration: 0.38 };
     this.skillAnim = {
@@ -3488,6 +3531,397 @@ export class DungeonEngine {
       const activeW = this.getActiveWorldW();
       this.pool.spawnAfterimage(this.px, this.py, this.facing, '#E879F9');
       this.px = Math.max(24, Math.min(activeW - this.pw - 24, this.px - this.facing * 135));
+    } else if (skillId === 'luna_phantom_scythe') {
+      // Throw two spinning returning phantom scythe crescents forward
+      this.comboStep = 2;
+      this.lunaCastFx = { kind: 'dash', timer: 0.24, maxTimer: 0.24 };
+      this.skillVfx.spawn({
+        kind: 'crescent_boomerang',
+        x: cx + this.facing * 26,
+        y: cy - 4,
+        tx: cx + this.facing * 240,
+        ty: cy - 4,
+        facing: this.facing,
+        radius: 64,
+        angle: 0,
+        maxLife: 0.34,
+        color: lunaStyle.bladeGlow,
+        coreColor: '#E0F2FE',
+        accentColor: lunaStyle.bladeCore,
+        orbitCount: 4,
+        followPlayer: false,
+        trackTargetToPlayer: false,
+      });
+      for (let k = 0; k < 2; k++) {
+        const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+        this.activeBoomerangs.push({
+          x: cx + this.facing * (24 + k * 14),
+          y: cy - 8 + k * 16,
+          vx: this.facing * (720 - k * 55),
+          vy: (k === 0 ? -1 : 1) * 48,
+          phase: 'out',
+          dist: 0,
+          maxDist: 380 + skillLevel * 20,
+          damage: Math.max(4, Math.round(damage * 0.62)),
+          isCrit,
+          hitIds: new Set<number>(),
+          color: lunaStyle.bladeGlow,
+          coreColor: '#E0F2FE',
+          spin: k * 1.4,
+          skillLevel: Math.min(3, Math.ceil(skillLevel / 3)),
+        });
+      }
+    } else if (skillId === 'luna_abyssal_execution') {
+      // Heavy scythe execution cleave with vertical shockwave + execute bonus below 50% HP
+      this.comboStep = 3;
+      this.trauma = Math.min(1, this.trauma + 0.52);
+      this.lunaCastFx = { kind: 'eclipse', timer: 0.3, maxTimer: 0.3 };
+      const strikeX = cx + this.facing * 68;
+      const strikeY = cy - 6;
+      this.skillVfx.spawn({
+        kind: 'blood_scythe_burst',
+        x: strikeX,
+        y: strikeY,
+        tx: strikeX,
+        ty: strikeY,
+        facing: this.facing,
+        radius: 175,
+        angle: 0,
+        maxLife: 0.52,
+        color: '#E11D48',
+        coreColor: '#FFE4E6',
+        accentColor: '#9333EA',
+        orbitCount: 6,
+        followPlayer: false,
+        trackTargetToPlayer: false,
+      });
+      this.skillVfx.spawn({
+        kind: 'vertical_shockwave',
+        x: strikeX,
+        y: this.py + this.ph,
+        tx: strikeX,
+        ty: this.py + this.ph,
+        facing: this.facing,
+        radius: 140,
+        angle: 0,
+        maxLife: 0.45,
+        color: '#9333EA',
+        coreColor: '#F5D0FE',
+        accentColor: '#F43F5E',
+        orbitCount: 4,
+        followPlayer: false,
+        trackTargetToPlayer: false,
+      });
+      this.pool.spawnBurst(strikeX, strikeY, 26, ['#F43F5E', '#A855F7', '#F5D0FE'], 95, 310, 5, true);
+      for (const enemy of this.enemies) {
+        if (enemy.state === 'ko') continue;
+        const ex = enemy.x + enemy.w * 0.5;
+        const ey = enemy.y + enemy.h * 0.5;
+        if (Math.hypot(ex - strikeX, ey - strikeY) <= 195) {
+          const execMult = enemy.hp < enemy.maxHp * 0.5 ? 1.35 : 1;
+          const { damage, isCrit } = calculateSkillDamage(
+            this.stats,
+            skillId,
+            skillLevel,
+            Math.random,
+            chainDmgMult * execMult
+          );
+          this.damageEnemy(enemy, damage, isCrit, 260);
+        }
+      }
+      const dBoxExec = this.getTrainingDummyBox();
+      if (dBoxExec && Math.hypot(dBoxExec.x + dBoxExec.w * 0.5 - strikeX, dBoxExec.y + dBoxExec.h * 0.5 - strikeY) <= 195) {
+        const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+        this.damageTrainingDummy(damage, isCrit);
+      }
+    } else if (skillId === 'lyra_earthshaker_slam') {
+      // Heavy gauntlet ground-shatter slam with crimson shockwave ring
+      this.comboStep = 3;
+      this.pvy = Math.max(this.pvy, 280);
+      this.trauma = Math.min(1, this.trauma + 0.5);
+      const slamX = cx + this.facing * 24;
+      const groundY = this.mode === 'lobby' ? LOBBY_GROUND_Y : this.getTerrainYAt(slamX);
+      this.skillVfx.spawn({
+        kind: 'boss_shockwave',
+        x: slamX,
+        y: groundY - 6,
+        tx: slamX,
+        ty: groundY - 6,
+        facing: this.facing,
+        radius: 205,
+        angle: 0,
+        maxLife: 0.48,
+        color: '#F97316',
+        coreColor: '#FEF08A',
+        accentColor: '#EF4444',
+        orbitCount: 6,
+        followPlayer: false,
+        trackTargetToPlayer: false,
+      });
+      this.skillVfx.spawn({
+        kind: 'vertical_shockwave',
+        x: slamX,
+        y: groundY,
+        tx: slamX,
+        ty: groundY,
+        facing: this.facing,
+        radius: 145,
+        angle: 0,
+        maxLife: 0.42,
+        color: '#FB923C',
+        coreColor: '#FEF08A',
+        accentColor: '#DC2626',
+        orbitCount: 4,
+        followPlayer: false,
+        trackTargetToPlayer: false,
+      });
+      this.pool.spawnBurst(slamX, groundY - 12, 28, ['#FEF08A', '#F97316', '#EF4444'], 100, 320, 5, true);
+      for (const enemy of this.enemies) {
+        if (enemy.state === 'ko') continue;
+        const ex = enemy.x + enemy.w * 0.5;
+        const ey = enemy.y + enemy.h * 0.5;
+        if (Math.hypot(ex - slamX, ey - cy) <= 210) {
+          const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+          this.damageEnemy(enemy, damage, isCrit, 280);
+          if (enemy.kind !== 'boss') enemy.vy = -190;
+        }
+      }
+      const dBoxSlam = this.getTrainingDummyBox();
+      if (dBoxSlam && Math.hypot(dBoxSlam.x + dBoxSlam.w * 0.5 - slamX, dBoxSlam.y + dBoxSlam.h * 0.5 - cy) <= 210) {
+        const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+        this.damageTrainingDummy(damage, isCrit);
+      }
+    } else if (skillId === 'lyra_phoenix_uppercut') {
+      // Rising flaming uppercut launching enemies into the air
+      this.comboStep = 2;
+      this.pvy = -445;
+      this.pvx = this.facing * 240;
+      this.grounded = false;
+      this.trauma = Math.min(1, this.trauma + 0.34);
+      const upperX = cx + this.facing * 32;
+      this.skillVfx.spawn({
+        kind: 'tornado_column',
+        x: upperX,
+        y: cy + 12,
+        tx: upperX,
+        ty: cy - 140,
+        facing: this.facing,
+        radius: 112,
+        angle: 0,
+        maxLife: 0.52,
+        color: '#FB923C',
+        coreColor: '#FEF08A',
+        accentColor: '#EF4444',
+        orbitCount: 4,
+        followPlayer: true,
+        trackTargetToPlayer: false,
+      });
+      this.skillVfx.spawn({
+        kind: 'sonic_cone',
+        x: upperX,
+        y: cy - 12,
+        tx: upperX + this.facing * 45,
+        ty: cy - 90,
+        facing: this.facing,
+        radius: 86,
+        angle: -0.75 * this.facing,
+        maxLife: 0.34,
+        color: '#F97316',
+        coreColor: '#FEF08A',
+        accentColor: '#EF4444',
+        orbitCount: 2,
+        followPlayer: false,
+        trackTargetToPlayer: false,
+      });
+      this.pool.spawnBurst(upperX, cy - 16, 22, ['#FEF08A', '#F97316', '#EF4444'], 90, 290, 5, true);
+      for (const enemy of this.enemies) {
+        if (enemy.state === 'ko') continue;
+        const ex = enemy.x + enemy.w * 0.5;
+        const ey = enemy.y + enemy.h * 0.5;
+        if (Math.hypot(ex - upperX, ey - cy) <= 175) {
+          const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+          this.damageEnemy(enemy, damage, isCrit, 220);
+          if (enemy.kind !== 'boss') enemy.vy = -330;
+        }
+      }
+      const dBoxUpper = this.getTrainingDummyBox();
+      if (dBoxUpper && Math.hypot(dBoxUpper.x + dBoxUpper.w * 0.5 - upperX, dBoxUpper.y + dBoxUpper.h * 0.5 - cy) <= 185) {
+        const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+        this.damageTrainingDummy(damage, isCrit);
+      }
+    } else if (skillId === 'witch_arcane_lightning') {
+      // Chain violet arcane thunder pillars across up to 4 targets
+      this.trauma = Math.min(1, this.trauma + 0.36);
+      const targets = this.enemies
+        .filter((e) => e.state !== 'ko' && Math.hypot(e.x + e.w * 0.5 - cx, e.y + e.h * 0.5 - cy) <= 520)
+        .sort(
+          (a, b) =>
+            Math.hypot(a.x + a.w * 0.5 - cx, a.y + a.h * 0.5 - cy) -
+            Math.hypot(b.x + b.w * 0.5 - cx, b.y + b.h * 0.5 - cy)
+        )
+        .slice(0, 4);
+      let prevX = cx;
+      let prevY = cy - 18;
+      for (const target of targets) {
+        const tx = target.x + target.w * 0.5;
+        const ty = target.y + target.h * 0.5;
+        this.skillVfx.spawn({
+          kind: 'lightning_bolt',
+          x: prevX,
+          y: prevY,
+          tx,
+          ty,
+          facing: tx >= prevX ? 1 : -1,
+          radius: 44,
+          angle: 0,
+          maxLife: 0.34,
+          color: '#A855F7',
+          coreColor: '#FEF08A',
+          accentColor: '#38BDF8',
+          orbitCount: 4,
+          followPlayer: false,
+          trackTargetToPlayer: false,
+        });
+        this.skillVfx.spawn({
+          kind: 'violet_thunder_pillar',
+          x: tx,
+          y: target.y + target.h,
+          tx,
+          ty,
+          facing: 1,
+          radius: 56,
+          angle: 0,
+          maxLife: 0.42,
+          color: '#A855F7',
+          coreColor: '#F5D0FE',
+          accentColor: '#38BDF8',
+          orbitCount: 3,
+          followPlayer: false,
+          trackTargetToPlayer: false,
+        });
+        prevX = tx;
+        prevY = ty;
+        const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+        this.damageEnemy(target, damage, isCrit, 120);
+        this.pool.spawnBurst(tx, ty, 14, ['#A855F7', '#F5D0FE', '#38BDF8'], 75, 240, 4, true);
+      }
+      const dBoxBolt = this.getTrainingDummyBox();
+      if (dBoxBolt && Math.hypot(dBoxBolt.x + dBoxBolt.w * 0.5 - cx, dBoxBolt.y + dBoxBolt.h * 0.5 - cy) <= 520) {
+        const tx = dBoxBolt.x + dBoxBolt.w * 0.5;
+        const ty = dBoxBolt.y + dBoxBolt.h * 0.5;
+        this.skillVfx.spawn({
+          kind: 'lightning_bolt',
+          x: prevX,
+          y: prevY,
+          tx,
+          ty,
+          facing: tx >= prevX ? 1 : -1,
+          radius: 44,
+          angle: 0,
+          maxLife: 0.34,
+          color: '#A855F7',
+          coreColor: '#FEF08A',
+          accentColor: '#38BDF8',
+          orbitCount: 4,
+          followPlayer: false,
+          trackTargetToPlayer: false,
+        });
+        const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+        this.damageTrainingDummy(damage, isCrit);
+      }
+      if (targets.length === 0 && !dBoxBolt) {
+        const emptyX = cx + this.facing * 150;
+        this.skillVfx.spawn({
+          kind: 'violet_thunder_pillar',
+          x: emptyX,
+          y: this.py + this.ph,
+          tx: emptyX,
+          ty: cy,
+          facing: this.facing,
+          radius: 68,
+          angle: 0,
+          maxLife: 0.42,
+          color: '#A855F7',
+          coreColor: '#F5D0FE',
+          accentColor: '#38BDF8',
+          orbitCount: 3,
+          followPlayer: false,
+          trackTargetToPlayer: false,
+        });
+      }
+    } else if (skillId === 'witch_chrono_nova') {
+      // Astral Chrono Nova wave: radial frost/arcane burst pushing enemies + healing 10% Max HP
+      this.trauma = Math.min(1, this.trauma + 0.32);
+      this.invulnTimer = Math.max(this.invulnTimer, 0.35);
+      this.skillVfx.spawn({
+        kind: 'frost_ring',
+        x: cx,
+        y: cy,
+        tx: cx,
+        ty: cy,
+        facing: this.facing,
+        radius: 190,
+        angle: 0,
+        maxLife: 0.55,
+        color: '#38BDF8',
+        coreColor: '#E0F2FE',
+        accentColor: '#C084FC',
+        orbitCount: 6,
+        followPlayer: true,
+        trackTargetToPlayer: false,
+      });
+      this.skillVfx.spawn({
+        kind: 'cast_eclipse_ring',
+        x: cx,
+        y: cy,
+        tx: cx,
+        ty: cy,
+        facing: this.facing,
+        radius: 145,
+        angle: 0,
+        maxLife: 0.44,
+        color: '#C084FC',
+        coreColor: '#E0F2FE',
+        accentColor: '#38BDF8',
+        orbitCount: 8,
+        followPlayer: true,
+        trackTargetToPlayer: false,
+      });
+      this.pool.spawnBurst(cx, cy, 24, ['#38BDF8', '#C084FC', '#E0F2FE'], 95, 290, 5, true);
+      for (const enemy of this.enemies) {
+        if (enemy.state === 'ko') continue;
+        const ex = enemy.x + enemy.w * 0.5;
+        const ey = enemy.y + enemy.h * 0.5;
+        if (Math.hypot(ex - cx, ey - cy) <= 215) {
+          const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+          this.damageEnemy(enemy, damage, isCrit, 310, 'freeze', 2);
+        }
+      }
+      const dBoxNova = this.getTrainingDummyBox();
+      if (dBoxNova && Math.hypot(dBoxNova.x + dBoxNova.w * 0.5 - cx, dBoxNova.y + dBoxNova.h * 0.5 - cy) <= 215) {
+        const { damage, isCrit } = calculateSkillDamage(this.stats, skillId, skillLevel, Math.random, chainDmgMult);
+        this.damageTrainingDummy(damage, isCrit);
+      }
+      const heal = Math.max(8, Math.round(this.stats.maxHp * 0.1));
+      this.hp = Math.min(this.stats.maxHp, this.hp + heal);
+      this.skillVfx.spawn({
+        kind: 'sustain_pulse',
+        x: cx,
+        y: cy,
+        tx: cx,
+        ty: cy,
+        facing: this.facing,
+        radius: 56,
+        angle: 0,
+        maxLife: 0.52,
+        color: '#38BDF8',
+        coreColor: '#F0FDF4',
+        accentColor: '#4ADE80',
+        orbitCount: 4,
+        followPlayer: true,
+        trackTargetToPlayer: false,
+      });
+      this.pool.spawnText(cx, this.py - 14, `+${heal} HP`, '#4ADE80', 1.1, 'heal');
     }
 
     this.emitHud(true);
@@ -4995,7 +5429,6 @@ export class DungeonEngine {
     const alive = this.enemies.filter((e) => e.state !== 'ko').length;
     if (alive === 0 && !this.portalReady) {
       this.portalReady = true;
-      this.clearHeldInputs();
       this.hitstopTimer = 0;
 
       if (this.subStage === 5 && this.bossDeathSpot) {

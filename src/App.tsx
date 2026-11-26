@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { RotateCw } from 'lucide-react';
 import { CatMerchantModal } from './components/CatMerchantModal';
 import { DungeonHud } from './components/DungeonHud';
 import { InventoryModal, type PendingSubSkillOffer } from './components/InventoryModal';
@@ -19,13 +20,18 @@ import { WeaponShopModal } from './components/WeaponShopModal';
 import { gameAudio } from './engine/audio';
 import { DungeonEngine } from './engine/dungeonEngine';
 import {
+  claimDailyQuestReward,
   claimDailyReward,
   claimEventBannerReward,
+  getClaimableDailyQuestCount,
   getNextClaimableDailyDay,
   getUnreadEventCount,
   performSinglePull,
   performTenPull,
+  syncDailyQuestDate,
+  trackDailyQuestProgress,
 } from './game/gacha';
+import { getUiStrings } from './game/i18n';
 import {
   claimBestiaryReward,
   forgeWeapon,
@@ -40,6 +46,7 @@ import {
 import {
   getTodayDateKey,
   hasExistingSaveData,
+  isCharacterUnlocked,
   loadSaveData,
   persistSaveData,
   resetSaveData,
@@ -53,6 +60,7 @@ import type {
   CatMerchantOffer,
   CharacterId,
   ChestChoiceOption,
+  DailyQuestId,
   GameScreenState,
   HudSnapshot,
   Keybindings,
@@ -76,7 +84,7 @@ import type {
 } from './game/types';
 
 const INITIAL_HUD: HudSnapshot = {
-  characterId: 'luna',
+  characterId: 'velvera',
   lobbyRoom: 'main',
   nearLobbyObject: null,
   dummyLastHit: 0,
@@ -162,6 +170,7 @@ export default function App() {
   const [sanctumOpen, setSanctumOpen] = useState(false);
   const [sanctumScope, setSanctumScope] = useState<SanctumScope>('character');
   const [sanctumTab, setSanctumTab] = useState<SanctumTab>('skills');
+  const [sanctumGachaBanner, setSanctumGachaBanner] = useState<CharacterId | undefined>(undefined);
   const [weaponShopOpen, setWeaponShopOpen] = useState(false);
   const [catShopOpen, setCatShopOpen] = useState(false);
   const [catOffers, setCatOffers] = useState<CatMerchantOffer[]>([]);
@@ -194,6 +203,7 @@ export default function App() {
   } | null>(null);
   const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
 
   const updateSave = useCallback((updater: (prev: SaveData) => SaveData) => {
     setSave((prev) => {
@@ -206,9 +216,22 @@ export default function App() {
     });
   }, []);
 
-  // Sync saved audio settings on initial mount
+  const tryLockLandscape = useCallback(() => {
+    const ori = window.screen?.orientation as { lock?: (mode: string) => Promise<void> } | undefined;
+    ori?.lock?.('landscape').catch(() => {});
+  }, []);
+
+  // Sync saved audio settings & daily quest date on initial mount
   useEffect(() => {
     gameAudio.setAudioSettings(saveRef.current.audioSettings);
+    const todayKey = getTodayDateKey();
+    if (saveRef.current.dailyQuests?.dateKey !== todayKey) {
+      setSave((prev) => {
+        const next = syncDailyQuestDate(prev, todayKey);
+        saveRef.current = next;
+        return next;
+      });
+    }
   }, []);
 
   // Keep body[data-state] synced with screen state
@@ -216,15 +239,21 @@ export default function App() {
     document.body.dataset.state = screen;
   }, [screen]);
 
-  // Detect coarse pointer / narrow mobile screens
+  // Detect coarse pointer / mobile screens & portrait orientation
   useEffect(() => {
-    const checkTouch = () => {
+    const checkViewport = () => {
       const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-      setIsTouchDevice(coarse || window.innerWidth <= 900);
+      const minDim = Math.min(window.innerWidth, window.innerHeight);
+      setIsTouchDevice(coarse || minDim <= 540 || window.innerWidth <= 900);
+      setIsPortrait(window.innerHeight > window.innerWidth);
     };
-    checkTouch();
-    window.addEventListener('resize', checkTouch);
-    return () => window.removeEventListener('resize', checkTouch);
+    checkViewport();
+    window.addEventListener('resize', checkViewport);
+    window.addEventListener('orientationchange', checkViewport);
+    return () => {
+      window.removeEventListener('resize', checkViewport);
+      window.removeEventListener('orientationchange', checkViewport);
+    };
   }, []);
 
   const setGameScreen = useCallback((next: GameScreenState) => {
@@ -261,6 +290,7 @@ export default function App() {
 
   const handlePlayNewGame = useCallback(() => {
     gameAudio.playClick();
+    tryLockLandscape();
     const fresh = resetSaveData();
     saveRef.current = fresh;
     setSave(fresh);
@@ -268,19 +298,21 @@ export default function App() {
     gameAudio.setAudioSettings(fresh.audioSettings);
     engineRef.current?.updateSaveData(fresh);
     enterLobby('main');
-  }, [enterLobby]);
+  }, [enterLobby, tryLockLandscape]);
 
   const handleContinue = useCallback(() => {
     if (!hasSave) return;
     gameAudio.playClick();
+    tryLockLandscape();
     enterLobby('main');
-  }, [hasSave, enterLobby]);
+  }, [hasSave, enterLobby, tryLockLandscape]);
 
   const startDungeon = useCallback(
     (stage = 1) => {
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
+      tryLockLandscape();
       setSanctumOpen(false);
       setWeaponShopOpen(false);
       setCatShopOpen(false);
@@ -299,7 +331,7 @@ export default function App() {
       engineRef.current?.startNewRun(stage, 1);
       canvasRef.current?.focus();
     },
-    [setGameScreen]
+    [setGameScreen, tryLockLandscape]
   );
 
   const handlePause = useCallback(() => {
@@ -311,13 +343,14 @@ export default function App() {
     }
   }, [setGameScreen]);
 
-  const openSanctum = useCallback((tab: SanctumTab, scope?: SanctumScope) => {
+  const openSanctum = useCallback((tab: SanctumTab, scope?: SanctumScope, bannerHero?: CharacterId) => {
     gameAudio.playClick();
     if (screenRef.current === 'playing') {
       engineRef.current?.setMode('paused');
       screenRef.current = 'paused';
       setScreen('paused');
     }
+    setSanctumGachaBanner(bannerHero);
     setSanctumScope(scope ?? getScopeForSanctumTab(tab));
     setSanctumTab(tab);
     setSanctumOpen(true);
@@ -326,6 +359,7 @@ export default function App() {
   const closeSanctum = useCallback(() => {
     gameAudio.playClick();
     setSanctumOpen(false);
+    setSanctumGachaBanner(undefined);
     canvasRef.current?.focus();
   }, []);
 
@@ -406,6 +440,7 @@ export default function App() {
       setChestReward({ stage, source: 'boss', ...reward });
     },
     onTombReward: (stage: number) => {
+      updateSave((prev) => trackDailyQuestProgress(prev, 'chestsOpened', 1, getTodayDateKey()));
       const currentSubs = engineRef.current?.getRunSubSkills() ?? [];
       const reward = rollTombActiveSkill(currentSubs);
       if (reward.needsSwap) {
@@ -436,6 +471,7 @@ export default function App() {
       setSupplyChestOffer({ chestIndex, options });
     },
     onStageDraftRequest: (nextStage: number, nextSubStage: number) => {
+      updateSave((prev) => trackDailyQuestProgress(prev, 'stagesCleared', 1, getTodayDateKey()));
       screenRef.current = 'paused';
       setScreen('paused');
       document.body.dataset.state = 'paused';
@@ -444,21 +480,35 @@ export default function App() {
       setStageDraft({ nextStage, nextSubStage, options });
     },
     onMonsterKilled: (kind: MonsterType) => {
-      updateSave((prev) => ({
-        ...prev,
-        bestiaryKills: {
-          ...prev.bestiaryKills,
-          [kind]: (prev.bestiaryKills[kind] ?? 0) + 1,
-        },
-      }));
+      updateSave((prev) =>
+        trackDailyQuestProgress(
+          {
+            ...prev,
+            bestiaryKills: {
+              ...prev.bestiaryKills,
+              [kind]: (prev.bestiaryKills[kind] ?? 0) + 1,
+            },
+          },
+          'kills',
+          1,
+          getTodayDateKey()
+        )
+      );
     },
     onSupplyChestLoot: (loot: { gold: number; shards: number; essence: number }) => {
-      updateSave((prev) => ({
-        ...prev,
-        gold: prev.gold + loot.gold,
-        forgeShards: prev.forgeShards + loot.shards,
-        skillEssence: prev.skillEssence + loot.essence,
-      }));
+      updateSave((prev) =>
+        trackDailyQuestProgress(
+          {
+            ...prev,
+            gold: prev.gold + loot.gold,
+            forgeShards: prev.forgeShards + loot.shards,
+            skillEssence: prev.skillEssence + loot.essence,
+          },
+          'chestsOpened',
+          1,
+          getTodayDateKey()
+        )
+      );
     },
     onInventoryFullDrop: (item: RunItemDef) => {
       openInventoryModal(item);
@@ -496,15 +546,20 @@ export default function App() {
       setPendingSubSkill(null);
       setSupplyChestOffer(null);
       setSuspendedChestOffer(null);
-      updateSave((prev) => ({
-        ...prev,
-        gems: prev.gems + summary.gemsEarned,
-        gold: prev.gold + summary.goldEarned,
-        forgeShards: prev.forgeShards + summary.shardsEarned,
-        skillEssence: prev.skillEssence + summary.essenceEarned,
-        highestStage: Math.max(prev.highestStage, summary.stageReached),
-        bestScore: Math.max(prev.bestScore, summary.score),
-      }));
+      updateSave((prev) => {
+        const base = {
+          ...prev,
+          gems: prev.gems + summary.gemsEarned,
+          gold: prev.gold + summary.goldEarned,
+          forgeShards: prev.forgeShards + summary.shardsEarned,
+          skillEssence: prev.skillEssence + summary.essenceEarned,
+          highestStage: Math.max(prev.highestStage, summary.stageReached),
+          bestScore: Math.max(prev.bestScore, summary.score),
+        };
+        return summary.outcome === 'victory'
+          ? trackDailyQuestProgress(base, 'stagesCleared', 1, getTodayDateKey())
+          : base;
+      });
       setRunSummary(summary);
       screenRef.current = 'gameover';
       setScreen('gameover');
@@ -685,6 +740,7 @@ export default function App() {
 
   const handleSelectCharacter = useCallback(
     (id: CharacterId) => {
+      if (!isCharacterUnlocked(saveRef.current, id)) return;
       gameAudio.playClick();
       updateSave((prev) => ({
         ...prev,
@@ -699,7 +755,7 @@ export default function App() {
       const res = performSinglePull(saveRef.current, { bannerId });
       gameAudio.playChestOrGacha(res.record.rarity === 'SSR');
       setLatestPulls([res.record]);
-      updateSave(() => res.nextSave);
+      updateSave(() => trackDailyQuestProgress(res.nextSave, 'pulls', 1, getTodayDateKey()));
     } catch {
       // Insufficient gems guarded in UI
     }
@@ -711,7 +767,7 @@ export default function App() {
       const hasSsr = res.records.some((r) => r.rarity === 'SSR');
       gameAudio.playChestOrGacha(hasSsr);
       setLatestPulls(res.records);
-      updateSave(() => res.nextSave);
+      updateSave(() => trackDailyQuestProgress(res.nextSave, 'pulls', 10, getTodayDateKey()));
     } catch {
       // Insufficient gems guarded in UI
     }
@@ -725,6 +781,17 @@ export default function App() {
       updateSave(() => res.nextSave);
     } catch {
       // Already claimed today
+    }
+  };
+
+  const handleClaimDailyQuest = (questId: DailyQuestId) => {
+    try {
+      const todayKey = getTodayDateKey();
+      const res = claimDailyQuestReward(saveRef.current, questId, todayKey);
+      gameAudio.playChestOrGacha(true);
+      updateSave(() => res.nextSave);
+    } catch {
+      // Not claimable yet
     }
   };
 
@@ -844,8 +911,11 @@ export default function App() {
     setSettingsOpen(true);
   }, [setGameScreen]);
 
+  const todayKey = getTodayDateKey();
   const unreadEvents = getUnreadEventCount(save);
-  const dailyClaimable = getNextClaimableDailyDay(save, getTodayDateKey()) !== null;
+  const dailyClaimable =
+    getNextClaimableDailyDay(save, todayKey) !== null ||
+    getClaimableDailyQuestCount(save, todayKey) > 0;
   const equippedSkills =
     save.selectedCharacter === 'luna'
       ? save.lunaEquippedSkills
@@ -857,9 +927,10 @@ export default function App() {
   const settingsContext: 'title' | 'lobby' | 'playing' =
     screen === 'title' ? 'title' : screen === 'lobby' ? 'lobby' : 'playing';
   const language: LanguageCode = save.language ?? 'id';
+  const uiStrings = getUiStrings(language);
 
   return (
-    <main className="relative w-full h-full overflow-hidden bg-[#09090E]">
+    <main className="app-main-container relative bg-[#09090E]">
       {/* Isolated Canvas Mount */}
       <div className="absolute inset-0">
         <canvas
@@ -1171,11 +1242,13 @@ export default function App() {
         open={sanctumOpen}
         scope={sanctumScope}
         initialTab={sanctumTab}
+        initialGachaBanner={sanctumGachaBanner}
         language={language}
         save={save}
         latestPulls={latestPulls}
         onClose={closeSanctum}
         onSelectCharacter={handleSelectCharacter}
+        onOpenGachaForHero={(heroId) => openSanctum('gacha', 'gacha', heroId)}
         onPullSingle={handlePullSingle}
         onPullTen={handlePullTen}
         onChangeLunaWeaponStyle={(style: ScytheWeaponId) => {
@@ -1259,8 +1332,37 @@ export default function App() {
         onUpgradeCharacter={handleUpgradeCharacter}
         onClaimBestiary={handleClaimBestiary}
         onClaimDaily={handleClaimDaily}
+        onClaimDailyQuest={handleClaimDailyQuest}
         onClaimEvent={handleClaimEvent}
       />
+
+      {/* Mobile Portrait Orientation Guard Overlay */}
+      {isTouchDevice && isPortrait && (
+        <div
+          data-testid="portrait-rotate-overlay"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 px-6 text-center bg-[#06070B]/95"
+          role="dialog"
+          aria-modal="true"
+          aria-label={uiStrings.rotateDeviceTitle}
+        >
+          <div className="w-16 h-16 rounded-xl bg-[#161826] border border-[#FACC15]/60 flex items-center justify-center shadow-lg">
+            <RotateCw className="w-8 h-8 text-[#FACC15]" />
+          </div>
+          <h2 className="font-display text-lg font-bold text-[#F8FAFC]">
+            {uiStrings.rotateDeviceTitle}
+          </h2>
+          <p className="text-xs text-[#94A3B8] max-w-xs leading-relaxed">
+            {uiStrings.rotateDeviceHint}
+          </p>
+          <button
+            type="button"
+            onClick={tryLockLandscape}
+            className="px-4 py-2 text-xs font-bold rounded bg-[#7E22CE] hover:bg-[#9333EA] text-white border border-[#C084FC]/60 cursor-pointer"
+          >
+            Landscape Mode
+          </button>
+        </div>
+      )}
     </main>
   );
 }

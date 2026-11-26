@@ -31,13 +31,13 @@ interface BgmSpec {
 // 13 Distinct dark-fantasy procedural BGM compositions:
 // Title, Lobby & Enchant Room are tranquil, dark-magical sanctuary ambiences (NO battle percussion).
 // Stage 1..10 feature rich multi-voice themes tailored to each Stage Boss.
-const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
+export const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
   title: {
     stepMs: 420,
     wave: 'sine',
     harmonyWave: 'triangle',
     bassWave: 'sine',
-    leadFilterHz: 1800,
+    leadFilterHz: 2100,
     padHz: 110.0,
     drumPattern: '........',
     melody: [293.66, 349.23, 440.0, 523.25, 440.0, 392.0, 349.23, 329.63],
@@ -50,7 +50,7 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
     wave: 'sine',
     harmonyWave: 'triangle',
     bassWave: 'sine',
-    leadFilterHz: 1650,
+    leadFilterHz: 1950,
     padHz: 130.81,
     drumPattern: '................',
     melody: [
@@ -72,7 +72,7 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
     wave: 'sine',
     harmonyWave: 'sine',
     bassWave: 'triangle',
-    leadFilterHz: 2300,
+    leadFilterHz: 2450,
     padHz: 146.83,
     drumPattern: '................',
     melody: [
@@ -94,7 +94,7 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
     wave: 'triangle',
     harmonyWave: 'sine',
     bassWave: 'triangle',
-    leadFilterHz: 2100,
+    leadFilterHz: 2200,
     padHz: 98.0,
     drumPattern: 'K..HS..HK.HHS..H',
     melody: [392.0, 466.16, 523.25, 466.16, 587.33, 523.25, 466.16, 392.0, 349.23, 440.0, 523.25, 659.25, 587.33, 523.25, 440.0, 349.23],
@@ -107,7 +107,7 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
     wave: 'sawtooth',
     harmonyWave: 'triangle',
     bassWave: 'sawtooth',
-    leadFilterHz: 1550,
+    leadFilterHz: 1750,
     padHz: 98.0,
     drumPattern: 'KKHSKKSHKSHKSSHK',
     melody: [261.63, 261.63, 311.13, 392.0, 349.23, 311.13, 293.66, 246.94, 261.63, 311.13, 392.0, 466.16, 392.0, 349.23, 311.13, 293.66],
@@ -120,7 +120,7 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
     wave: 'sawtooth',
     harmonyWave: 'sawtooth',
     bassWave: 'triangle',
-    leadFilterHz: 1380,
+    leadFilterHz: 1550,
     padHz: 110.0,
     drumPattern: 'K...S...K..KS..H',
     melody: [220.0, 261.63, 329.63, 440.0, 415.3, 329.63, 293.66, 246.94, 220.0, 246.94, 261.63, 329.63, 392.0, 349.23, 329.63, 246.94],
@@ -159,7 +159,7 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
     wave: 'triangle',
     harmonyWave: 'sine',
     bassWave: 'sawtooth',
-    leadFilterHz: 1850,
+    leadFilterHz: 1950,
     padHz: 110.0,
     drumPattern: 'K.HSK.H.K.HSKHSS',
     melody: [329.63, 349.23, 415.3, 493.88, 523.25, 493.88, 415.3, 349.23, 329.63, 493.88, 523.25, 659.25, 587.33, 523.25, 415.3, 349.23],
@@ -172,7 +172,7 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
     wave: 'sawtooth',
     harmonyWave: 'square',
     bassWave: 'sawtooth',
-    leadFilterHz: 2050,
+    leadFilterHz: 2100,
     padHz: 130.81,
     drumPattern: 'KHKSHKSHKHKSKSSS',
     melody: [261.63, 329.63, 392.0, 523.25, 493.88, 392.0, 349.23, 293.66, 261.63, 349.23, 440.0, 523.25, 587.33, 523.25, 440.0, 392.0],
@@ -185,7 +185,7 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
     wave: 'square',
     harmonyWave: 'sawtooth',
     bassWave: 'sawtooth',
-    leadFilterHz: 1150,
+    leadFilterHz: 1350,
     padHz: 87.31,
     drumPattern: 'K...S...KK..S..H',
     melody: [174.61, 174.61, 207.65, 261.63, 233.08, 207.65, 196.0, 174.61, 174.61, 233.08, 261.63, 311.13, 293.66, 261.63, 207.65, 155.56],
@@ -220,15 +220,56 @@ const BGM_TRACKS: Record<BgmTrackId, BgmSpec> = {
   },
 };
 
+export const ALL_BGM_TRACK_IDS = Object.keys(BGM_TRACKS) as BgmTrackId[];
+
+export interface StereoVoiceLevels {
+  leadGain: number;
+  harmonyGain: number;
+  bassGain: number;
+  padGain: number;
+  kickGain: number;
+  snareGain: number;
+  hihatGain: number;
+  panLead: number;
+  panHarmony: number;
+  panBass: number;
+  panSnare: number;
+  panHihat: number;
+}
+
+export function getBgmVoiceLevels(isSanctuary: boolean): StereoVoiceLevels {
+  return {
+    leadGain: isSanctuary ? 0.135 : 0.145,
+    harmonyGain: isSanctuary ? 0.088 : 0.095,
+    bassGain: isSanctuary ? 0.155 : 0.165,
+    padGain: isSanctuary ? 0.085 : 0.075,
+    kickGain: 0.23,
+    snareGain: 0.11,
+    hihatGain: 0.068,
+    panLead: 0.1,
+    panHarmony: -0.22,
+    panBass: 0,
+    panSnare: -0.12,
+    panHihat: 0.24,
+  };
+}
+
 class GameAudioEngine {
   private ctx: AudioContext | null = null;
   private noiseBuffer: AudioBuffer | null = null;
-  private bgmBus: GainNode | null = null;
+  private masterLimiter: DynamicsCompressorNode | null = null;
+  private bgmMasterGain: GainNode | null = null;
+  private sfxMasterGain: GainNode | null = null;
+  private bgmWetInput: GainNode | null = null;
+  private activeTrackGain: GainNode | null = null;
+  private activeTrackWetSend: GainNode | null = null;
+
   private muted = false;
   private masterVol = 0.8;
   private bgmVol = 0.7;
   private sfxVol = 0.85;
   private userUnlocked = false;
+  private listenersAttached = false;
 
   private currentTrack: BgmTrackId | null = null;
   private bgmTimer: number | null = null;
@@ -236,70 +277,212 @@ class GameAudioEngine {
 
   constructor() {
     if (typeof window !== 'undefined') {
-      const unlock = () => {
-        this.userUnlocked = true;
-        const ctx = this.ensureContext();
-        if (ctx && this.currentTrack && this.bgmTimer === null && this.getBgmGainScale() > 0.001) {
-          const track = this.currentTrack;
-          this.currentTrack = null;
-          this.setBgmTrack(track);
-        }
-        window.removeEventListener('pointerdown', unlock, true);
-        window.removeEventListener('keydown', unlock, true);
-      };
-      window.addEventListener('pointerdown', unlock, true);
-      window.addEventListener('keydown', unlock, true);
+      this.attachUnlockListeners();
+    }
+  }
+
+  private attachUnlockListeners(): void {
+    if (this.listenersAttached || typeof window === 'undefined') return;
+    this.listenersAttached = true;
+
+    const tryUnlockAndResume = () => {
+      this.userUnlocked = true;
+      const ctx = this.ensureContext();
+      if (ctx && ctx.state === 'suspended' && !this.muted) {
+        ctx
+          .resume()
+          .then(() => {
+            this.syncMasterGains();
+            if (this.currentTrack && this.bgmTimer === null && this.getBgmGainScale() > 0.001) {
+              const track = this.currentTrack;
+              this.currentTrack = null;
+              this.setBgmTrack(track);
+            }
+          })
+          .catch(() => {});
+      } else if (
+        ctx &&
+        ctx.state === 'running' &&
+        this.currentTrack &&
+        this.bgmTimer === null &&
+        this.getBgmGainScale() > 0.001
+      ) {
+        const track = this.currentTrack;
+        this.currentTrack = null;
+        this.setBgmTrack(track);
+      }
+    };
+
+    const onFocusOrVisible = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (this.userUnlocked && this.ctx && this.ctx.state === 'suspended' && !this.muted) {
+        this.ctx.resume().catch(() => {});
+      }
+    };
+
+    window.addEventListener('pointerdown', tryUnlockAndResume, true);
+    window.addEventListener('touchstart', tryUnlockAndResume, true);
+    window.addEventListener('click', tryUnlockAndResume, true);
+    window.addEventListener('keydown', tryUnlockAndResume, true);
+    window.addEventListener('focus', onFocusOrVisible);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onFocusOrVisible);
     }
   }
 
   private ensureContext(): AudioContext | null {
-    if (this.muted || typeof window === 'undefined' || !this.userUnlocked) return null;
+    if (typeof window === 'undefined' || !this.userUnlocked) return null;
     if (!this.ctx) {
       const AudioCtx =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return null;
-      this.ctx = new AudioCtx();
+      const ctx = new AudioCtx();
+      this.ctx = ctx;
 
-      // Shared dark-cathedral BGM bus with warm echo feedback for atmospheric depth
-      const bus = this.ctx.createGain();
-      const dry = this.ctx.createGain();
-      const delay = this.ctx.createDelay(0.6);
-      const feedback = this.ctx.createGain();
-      const wetFilter = this.ctx.createBiquadFilter();
-      const wetGain = this.ctx.createGain();
+      // Force balanced 2-channel stereo output wherever supported
+      try {
+        if (ctx.destination.maxChannelCount >= 2) {
+          ctx.destination.channelCount = 2;
+        }
+        ctx.destination.channelCountMode = 'explicit';
+        ctx.destination.channelInterpretation = 'speakers';
+      } catch {
+        // Fallback safely if browser locks destination properties
+      }
 
-      delay.delayTime.value = 0.28;
-      feedback.gain.value = 0.34;
-      wetFilter.type = 'lowpass';
-      wetFilter.frequency.value = 1500;
-      wetGain.gain.value = 0.28;
-      dry.gain.value = 0.92;
+      // Soft master stereo compressor / limiter to keep loud BGM + SFX rich without clipping
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -14;
+      compressor.knee.value = 12;
+      compressor.ratio.value = 4;
+      compressor.attack.value = 0.004;
+      compressor.release.value = 0.16;
+      compressor.connect(ctx.destination);
+      this.masterLimiter = compressor;
 
-      bus.connect(dry);
-      dry.connect(this.ctx.destination);
+      const bgmMaster = ctx.createGain();
+      bgmMaster.gain.value = this.getBgmGainScale() * 1.35;
+      bgmMaster.connect(compressor);
+      this.bgmMasterGain = bgmMaster;
 
-      bus.connect(delay);
-      delay.connect(wetFilter);
-      wetFilter.connect(wetGain);
-      wetGain.connect(this.ctx.destination);
-      wetFilter.connect(feedback);
-      feedback.connect(delay);
-      this.bgmBus = bus;
+      const sfxMaster = ctx.createGain();
+      sfxMaster.gain.value = this.getSfxGainScale();
+      sfxMaster.connect(compressor);
+      this.sfxMasterGain = sfxMaster;
+
+      // Balanced Dual-Channel Stereo Cathedral Bus (subtle L/R width for headphones & speakers)
+      const wetIn = ctx.createGain();
+      wetIn.gain.value = 1;
+      const delayL = ctx.createDelay(0.6);
+      const delayR = ctx.createDelay(0.6);
+      delayL.delayTime.value = 0.21;
+      delayR.delayTime.value = 0.29;
+
+      const lpL = ctx.createBiquadFilter();
+      const lpR = ctx.createBiquadFilter();
+      lpL.type = 'lowpass';
+      lpR.type = 'lowpass';
+      lpL.frequency.value = 2100;
+      lpR.frequency.value = 1900;
+
+      const fbL = ctx.createGain();
+      const fbR = ctx.createGain();
+      fbL.gain.value = 0.22;
+      fbR.gain.value = 0.22;
+
+      const wetGainL = ctx.createGain();
+      const wetGainR = ctx.createGain();
+      wetGainL.gain.value = 0.28;
+      wetGainR.gain.value = 0.28;
+
+      wetIn.connect(delayL);
+      delayL.connect(lpL);
+      lpL.connect(fbL);
+      fbL.connect(delayR);
+      this.connectWithPan(lpL, wetGainL, -0.32);
+      wetGainL.connect(bgmMaster);
+
+      wetIn.connect(delayR);
+      delayR.connect(lpR);
+      lpR.connect(fbR);
+      fbR.connect(delayL);
+      this.connectWithPan(lpR, wetGainR, 0.32);
+      wetGainR.connect(bgmMaster);
+
+      this.bgmWetInput = wetIn;
 
       // Short reusable white-noise buffer for procedural percussion
-      const length = Math.floor(this.ctx.sampleRate * 0.25);
-      const buf = this.ctx.createBuffer(1, length, this.ctx.sampleRate);
+      const length = Math.floor(ctx.sampleRate * 0.28);
+      const buf = ctx.createBuffer(1, length, ctx.sampleRate);
       const data = buf.getChannelData(0);
       for (let i = 0; i < length; i++) {
         data[i] = Math.random() * 2 - 1;
       }
       this.noiseBuffer = buf;
     }
-    if (this.ctx.state === 'suspended') {
+
+    if (!this.muted && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  private connectWithPan(source: AudioNode, dest: AudioNode, pan: number): void {
+    const ctx = this.ctx;
+    if (!ctx || Math.abs(pan) < 0.01 || typeof ctx.createStereoPanner !== 'function') {
+      source.connect(dest);
+      return;
+    }
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, pan));
+    source.connect(panner);
+    panner.connect(dest);
+  }
+
+  private syncMasterGains(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const bgmTarget = this.getBgmGainScale() * 1.35;
+    const sfxTarget = this.getSfxGainScale();
+    if (this.bgmMasterGain) {
+      this.bgmMasterGain.gain.setTargetAtTime(bgmTarget, now, 0.03);
+    }
+    if (this.sfxMasterGain) {
+      this.sfxMasterGain.gain.setTargetAtTime(sfxTarget, now, 0.02);
+    }
+  }
+
+  private fadeOutActiveTrackBus(): void {
+    const ctx = this.ctx;
+    const oldTrackGain = this.activeTrackGain;
+    const oldWetSend = this.activeTrackWetSend;
+    this.activeTrackGain = null;
+    this.activeTrackWetSend = null;
+    if (!ctx || !oldTrackGain) return;
+
+    const now = ctx.currentTime;
+    try {
+      oldTrackGain.gain.cancelScheduledValues(now);
+      oldTrackGain.gain.setValueAtTime(Math.max(0.0001, oldTrackGain.gain.value), now);
+      oldTrackGain.gain.linearRampToValueAtTime(0.0001, now + 0.14);
+      if (oldWetSend) {
+        oldWetSend.gain.cancelScheduledValues(now);
+        oldWetSend.gain.setValueAtTime(Math.max(0.0001, oldWetSend.gain.value), now);
+        oldWetSend.gain.linearRampToValueAtTime(0.0001, now + 0.14);
+      }
+      window.setTimeout(() => {
+        try {
+          oldTrackGain.disconnect();
+          oldWetSend?.disconnect();
+        } catch {
+          // Already disconnected
+        }
+      }, 190);
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 
   setAudioSettings(settings: AudioSettings): void {
@@ -307,8 +490,11 @@ class GameAudioEngine {
     this.bgmVol = Math.max(0, Math.min(1, settings.bgmVolume / 100));
     this.sfxVol = Math.max(0, Math.min(1, settings.sfxVolume / 100));
     this.muted = settings.muted;
+    this.syncMasterGains();
+
     if (this.muted || this.masterVol <= 0.001 || this.bgmVol <= 0.001) {
       this.stopBgmTimerOnly();
+      this.fadeOutActiveTrackBus();
     } else if (this.currentTrack && this.bgmTimer === null) {
       const track = this.currentTrack;
       this.currentTrack = null;
@@ -318,17 +504,45 @@ class GameAudioEngine {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
+    this.syncMasterGains();
     if (muted) {
       this.stopBgmTimerOnly();
-    } else if (this.currentTrack && this.bgmTimer === null) {
-      const track = this.currentTrack;
-      this.currentTrack = null;
-      this.setBgmTrack(track);
+      this.fadeOutActiveTrackBus();
+    } else {
+      const ctx = this.ensureContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      if (this.currentTrack && this.bgmTimer === null) {
+        const track = this.currentTrack;
+        this.currentTrack = null;
+        this.setBgmTrack(track);
+      }
     }
   }
 
   isMuted(): boolean {
     return this.muted;
+  }
+
+  getDiagnostics(): {
+    currentTrack: BgmTrackId | null;
+    unlocked: boolean;
+    contextState: AudioContextState | 'uninitialized';
+    channelCount: number;
+    hasStereoCompressor: boolean;
+    bgmScale: number;
+    sfxScale: number;
+  } {
+    return {
+      currentTrack: this.currentTrack,
+      unlocked: this.userUnlocked,
+      contextState: this.ctx?.state ?? 'uninitialized',
+      channelCount: this.ctx?.destination.channelCount ?? 2,
+      hasStereoCompressor: Boolean(this.masterLimiter),
+      bgmScale: Number(this.getBgmGainScale().toFixed(3)),
+      sfxScale: Number(this.getSfxGainScale().toFixed(3)),
+    };
   }
 
   private getSfxGainScale(): number {
@@ -346,17 +560,40 @@ class GameAudioEngine {
     if (this.currentTrack === track && this.bgmTimer !== null) return;
     this.currentTrack = track;
     this.stopBgmTimerOnly();
+    this.fadeOutActiveTrackBus();
     if (this.getBgmGainScale() <= 0.001) return;
 
     const spec = BGM_TRACKS[track];
     const isSanctuary = track === 'title' || track === 'lobby' || track === 'enchant';
+    const levels = getBgmVoiceLevels(isSanctuary);
     this.bgmStep = 0;
 
-    this.bgmTimer = window.setInterval(() => {
-      const vol = this.getBgmGainScale();
-      if (vol <= 0.001 || (typeof document !== 'undefined' && document.hidden)) return;
+    const setupTrackBus = (ctx: AudioContext) => {
+      if (this.activeTrackGain || !this.bgmMasterGain) return;
+      const now = ctx.currentTime;
+      const trackDry = ctx.createGain();
+      trackDry.gain.setValueAtTime(0.001, now);
+      trackDry.gain.linearRampToValueAtTime(1.0, now + 0.12);
+      trackDry.connect(this.bgmMasterGain);
+      this.activeTrackGain = trackDry;
+
+      if (this.bgmWetInput) {
+        const wetSend = ctx.createGain();
+        wetSend.gain.setValueAtTime(0.001, now);
+        wetSend.gain.linearRampToValueAtTime(0.36, now + 0.14);
+        trackDry.connect(wetSend);
+        wetSend.connect(this.bgmWetInput);
+        this.activeTrackWetSend = wetSend;
+      }
+    };
+
+    const playStep = () => {
+      if (this.getBgmGainScale() <= 0.001 || (typeof document !== 'undefined' && document.hidden)) {
+        return;
+      }
       const ctx = this.ensureContext();
       if (!ctx || ctx.state !== 'running') return;
+      setupTrackBus(ctx);
 
       const idx = this.bgmStep % spec.melody.length;
       const leadFreq = spec.melody[idx];
@@ -364,62 +601,68 @@ class GameAudioEngine {
       const bassFreq = spec.bass[idx];
       const drumHit = spec.drumPattern[this.bgmStep % spec.drumPattern.length];
       const isBarStart = idx % 8 === 0;
+      const padPan = (this.bgmStep / 8) % 2 === 0 ? -0.14 : 0.14;
       this.bgmStep++;
 
-      const dur = (spec.stepMs / 1000) * (isSanctuary ? 1.45 : 0.88);
+      const dur = (spec.stepMs / 1000) * (isSanctuary ? 1.55 : 0.94);
       if (leadFreq > 0) {
         this.playFilteredBgmNote(
           leadFreq,
           dur,
           spec.wave,
-          (isSanctuary ? 0.028 : 0.036) * vol,
+          levels.leadGain,
           spec.leadFilterHz,
-          true
+          levels.panLead
         );
       }
       if (harmFreq > 0) {
         this.playFilteredBgmNote(
           harmFreq,
-          dur * 0.96,
+          dur * 0.98,
           spec.harmonyWave,
-          (isSanctuary ? 0.02 : 0.022) * vol,
-          spec.leadFilterHz * 0.85,
-          true
+          levels.harmonyGain,
+          spec.leadFilterHz * 0.88,
+          levels.panHarmony
         );
       }
       if (bassFreq > 0) {
         this.playFilteredBgmNote(
           bassFreq,
-          dur * (isSanctuary ? 1.85 : 1.15),
+          dur * (isSanctuary ? 1.85 : 1.18),
           spec.bassWave,
-          (isSanctuary ? 0.034 : 0.044) * vol,
-          680,
-          false
+          levels.bassGain,
+          760,
+          levels.panBass
         );
       }
       if (isBarStart && spec.padHz) {
         this.playFilteredBgmNote(
           spec.padHz,
-          (spec.stepMs / 1000) * 6.5,
+          (spec.stepMs / 1000) * 6.0,
           'sine',
-          (isSanctuary ? 0.022 : 0.016) * vol,
-          520,
-          true
+          levels.padGain,
+          560,
+          padPan
         );
       }
       if (drumHit === 'K') {
-        this.playDrumKick(0.055 * vol);
+        this.playDrumKick(levels.kickGain);
       } else if (drumHit === 'S') {
-        this.playDrumNoise(0.09, 1400, 0.026 * vol);
+        this.playDrumNoise(0.09, 1400, levels.snareGain, levels.panSnare);
       } else if (drumHit === 'H') {
-        this.playDrumNoise(0.035, 5200, 0.015 * vol);
+        this.playDrumNoise(0.035, 5200, levels.hihatGain, levels.panHihat);
       }
-    }, spec.stepMs);
+    };
+
+    // Play first note immediately if context is already unlocked and running
+    playStep();
+    this.bgmTimer = window.setInterval(playStep, spec.stepMs);
   }
 
   stopBgm(): void {
     this.currentTrack = null;
     this.stopBgmTimerOnly();
+    this.fadeOutActiveTrackBus();
   }
 
   private stopBgmTimerOnly(): void {
@@ -435,10 +678,11 @@ class GameAudioEngine {
     type: OscillatorType,
     volume: number,
     cutoffHz: number,
-    useReverbBus = true
+    pan = 0
   ): void {
     const ctx = this.ctx;
-    if (!ctx || ctx.state !== 'running' || volume <= 0.0005) return;
+    const dest = this.activeTrackGain ?? this.bgmMasterGain;
+    if (!ctx || ctx.state !== 'running' || !dest || volume <= 0.0005) return;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const filter = ctx.createBiquadFilter();
@@ -448,35 +692,37 @@ class GameAudioEngine {
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(cutoffHz, now);
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(volume, now + Math.min(0.045, duration * 0.16));
+    gain.gain.linearRampToValueAtTime(volume, now + Math.min(0.04, duration * 0.16));
     gain.gain.exponentialRampToValueAtTime(0.0008, now + duration);
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(useReverbBus && this.bgmBus ? this.bgmBus : ctx.destination);
+    this.connectWithPan(gain, dest, pan);
     osc.start(now);
     osc.stop(now + duration + 0.03);
   }
 
   private playDrumKick(volume: number): void {
     const ctx = this.ctx;
-    if (!ctx || ctx.state !== 'running' || volume <= 0.0005) return;
+    const dest = this.activeTrackGain ?? this.bgmMasterGain;
+    if (!ctx || ctx.state !== 'running' || !dest || volume <= 0.0005) return;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(135, now);
+    osc.frequency.setValueAtTime(140, now);
     osc.frequency.exponentialRampToValueAtTime(42, now + 0.11);
     gain.gain.setValueAtTime(volume, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(dest);
     osc.start(now);
     osc.stop(now + 0.13);
   }
 
-  private playDrumNoise(duration: number, highpassHz: number, volume: number): void {
+  private playDrumNoise(duration: number, highpassHz: number, volume: number, pan = 0): void {
     const ctx = this.ctx;
-    if (!ctx || ctx.state !== 'running' || !this.noiseBuffer || volume <= 0.0005) return;
+    const dest = this.activeTrackGain ?? this.bgmMasterGain;
+    if (!ctx || ctx.state !== 'running' || !this.noiseBuffer || !dest || volume <= 0.0005) return;
     const now = ctx.currentTime;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer;
@@ -488,7 +734,7 @@ class GameAudioEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
     src.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    this.connectWithPan(gain, dest, pan);
     src.start(now);
     src.stop(now + duration + 0.01);
   }
@@ -499,16 +745,18 @@ class GameAudioEngine {
     duration: number,
     type: OscillatorType,
     volume: number,
-    jitter = 0.08
+    jitter = 0.08,
+    pan = 0
   ): void {
     const scale = this.getSfxGainScale();
     if (scale <= 0.001) return;
     const ctx = this.ensureContext();
-    if (!ctx) return;
+    if (!ctx || !this.sfxMasterGain) return;
 
     const now = ctx.currentTime;
     const pitchMod = 1 + (Math.random() * 2 - 1) * jitter;
-    const finalVol = Math.max(0.001, volume * scale);
+    // Routed through sfxMasterGain (which already scales by masterVol * sfxVol)
+    const finalVol = Math.max(0.001, volume);
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -520,61 +768,63 @@ class GameAudioEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    this.connectWithPan(gain, this.sfxMasterGain, pan);
     osc.start(now);
     osc.stop(now + duration);
   }
 
   playSlash(comboStep = 1): void {
     const base = 340 + comboStep * 75;
-    this.playTone(base, 110, 0.09, 'sawtooth', 0.08, 0.08);
+    const pan = comboStep % 2 === 0 ? -0.1 : 0.1;
+    this.playTone(base, 110, 0.09, 'sawtooth', 0.11, 0.08, pan);
   }
 
   playHit(isCrit = false): void {
+    const pan = (Math.random() * 2 - 1) * 0.12;
     if (isCrit) {
-      this.playTone(620, 140, 0.14, 'square', 0.1, 0.06);
-      this.playTone(220, 65, 0.16, 'triangle', 0.12, 0.05);
+      this.playTone(620, 140, 0.14, 'square', 0.13, 0.06, pan);
+      this.playTone(220, 65, 0.16, 'triangle', 0.15, 0.05, 0);
     } else {
-      this.playTone(260, 85, 0.08, 'triangle', 0.08, 0.09);
+      this.playTone(260, 85, 0.08, 'triangle', 0.11, 0.09, pan);
     }
   }
 
   playKill(): void {
-    this.playTone(420, 90, 0.18, 'sawtooth', 0.09, 0.06);
+    this.playTone(420, 90, 0.18, 'sawtooth', 0.12, 0.06);
   }
 
   playJump(): void {
-    this.playTone(210, 480, 0.11, 'sine', 0.07, 0.05);
+    this.playTone(210, 480, 0.11, 'sine', 0.1, 0.05);
   }
 
   playDash(): void {
-    this.playTone(540, 180, 0.12, 'triangle', 0.08, 0.06);
+    this.playTone(540, 180, 0.12, 'triangle', 0.11, 0.06);
   }
 
   playPlayerHurt(): void {
-    this.playTone(170, 58, 0.2, 'sawtooth', 0.12, 0.04);
+    this.playTone(170, 58, 0.2, 'sawtooth', 0.15, 0.04);
   }
 
   playSkill(): void {
-    this.playTone(260, 780, 0.22, 'sawtooth', 0.09, 0.05);
-    this.playTone(520, 210, 0.26, 'sine', 0.08, 0.05);
+    this.playTone(260, 780, 0.22, 'sawtooth', 0.12, 0.05, -0.08);
+    this.playTone(520, 210, 0.26, 'sine', 0.11, 0.05, 0.08);
   }
 
   playPortal(): void {
-    this.playTone(330, 660, 0.22, 'sine', 0.08, 0.02);
-    this.playTone(495, 990, 0.26, 'triangle', 0.06, 0.02);
+    this.playTone(330, 660, 0.22, 'sine', 0.11, 0.02, -0.1);
+    this.playTone(495, 990, 0.26, 'triangle', 0.09, 0.02, 0.1);
   }
 
   playChestOrGacha(isHighRarity = false): void {
-    this.playTone(440, 660, 0.16, 'triangle', 0.09, 0.01);
-    setTimeout(() => this.playTone(660, 880, 0.2, 'sine', 0.09, 0.01), 90);
+    this.playTone(440, 660, 0.16, 'triangle', 0.12, 0.01, -0.08);
+    setTimeout(() => this.playTone(660, 880, 0.2, 'sine', 0.12, 0.01, 0.08), 90);
     if (isHighRarity) {
-      setTimeout(() => this.playTone(880, 1320, 0.32, 'sine', 0.1, 0.01), 190);
+      setTimeout(() => this.playTone(880, 1320, 0.32, 'sine', 0.14, 0.01, 0), 190);
     }
   }
 
   playClick(): void {
-    this.playTone(520, 320, 0.045, 'sine', 0.05, 0.03);
+    this.playTone(520, 320, 0.045, 'sine', 0.08, 0.03);
   }
 }
 

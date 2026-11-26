@@ -2,23 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { SaveData } from './types';
 import {
+  ALL_MOBILE_BUTTON_IDS,
   createInitialSaveData,
   DEFAULT_KEYBINDINGS,
   DEFAULT_MOBILE_CONTROLS,
   hasExistingSaveData,
+  isCharacterUnlocked,
+  loadSaveData,
   persistSaveData,
 } from './storage';
 import {
   calculateSsrRate,
+  claimDailyQuestReward,
   claimDailyReward,
   claimEventBannerReward,
   DAILY_LOGIN_REWARDS,
+  DAILY_QUESTS,
   EVENT_BANNERS,
   GACHA_COST_SINGLE,
   GACHA_COST_TEN,
+  getClaimableDailyQuestCount,
   HARD_PITY_LIMIT,
   performSinglePull,
   performTenPull,
+  syncDailyQuestDate,
+  trackDailyQuestProgress,
 } from './gacha';
 import {
   addRunInventoryItem,
@@ -62,6 +70,7 @@ import {
   rollTombActiveSkill,
   RUN_ITEMS,
   shouldResetDummyMetrics,
+  shouldSpawnCatMerchant,
   STAGE_BGM_NAMES,
   STAGE_BOSS_NAMES,
   SUB_SKILLS,
@@ -71,10 +80,13 @@ import {
 } from './progression';
 import {
   aabbOverlap,
+  ATK_PER_CHAR_LEVEL,
+  BASIC_ATTACK_DAMAGE_RATIO,
   calculateSkillDamage,
   calculateSlashDamage,
   COMBAT_DAMAGE_SCALE,
   computePlayerStats,
+  getBasicAttackComboMultiplier,
 } from './combatMath';
 import {
   COMBO_CHAIN_WINDOW_SEC,
@@ -98,6 +110,7 @@ import {
 import { SkillVfxPool } from '../engine/skillVfx';
 import { getSanctumNavForScope, getScopeForSanctumTab } from './sanctumNav';
 import { getStageLayout, getTerrainYFromSegments, validateStageLayout } from './stageLayouts';
+import { ALL_BGM_TRACK_IDS, BGM_TRACKS, getBgmVoiceLevels } from '../engine/audio';
 
 test('gacha hard pity guarantees SSR Velvera at pull 80 and resets pity to 0', () => {
   const base = createInitialSaveData();
@@ -341,9 +354,12 @@ test('weapon forging, passive skill tree, boss chest sub-skill, and combat math 
   const stats = computePlayerStats(save);
   assert.ok(stats.attack > 30);
 
+  const nonCritSlash = calculateSlashDamage(stats, 1.2, () => 0.99);
   const slash = calculateSlashDamage(stats, 1.2, () => 0.01);
+  assert.equal(nonCritSlash.isCrit, false);
   assert.equal(slash.isCrit, true);
-  assert.ok(slash.damage > stats.attack);
+  assert.ok(slash.damage > nonCritSlash.damage);
+  assert.ok(slash.damage < 1000);
 
   const chest = rollBossChestSkill([], () => 0.8);
   assert.ok(ALL_SUB_SKILL_IDS.includes(chest.skillId));
@@ -414,18 +430,33 @@ test('Lyra character has faster martial stats, dedicated active skill pool, and 
   assert.ok(lyraStats.critChance > velveraStats.critChance);
 
   const lyraSkills = getCharacterActiveSkills('lyra');
-  assert.deepEqual(lyraSkills, ['lyra_fist_rush', 'lyra_cyclone_kick', 'lyra_aura_overdrive']);
+  assert.deepEqual(lyraSkills, [
+    'lyra_fist_rush',
+    'lyra_cyclone_kick',
+    'lyra_aura_overdrive',
+    'lyra_earthshaker_slam',
+    'lyra_phoenix_uppercut',
+  ]);
 
   const nearPity = { ...lyraSave, gems: 1000, pityCount: HARD_PITY_LIMIT - 1 };
-  const { nextSave, record } = performSinglePull(nearPity, {
+  const firstPull = performSinglePull(nearPity, {
     rng: () => 0.999,
     now: 2000,
     bannerId: 'lyra',
   });
-  assert.equal(record.rarity, 'SSR');
-  assert.equal(record.itemId, 'char_lyra_ssr');
-  assert.equal(nextSave.lyraAwakening, 1);
-  assert.equal(nextSave.pityCount, 0);
+  assert.equal(firstPull.record.rarity, 'SSR');
+  assert.equal(firstPull.record.itemId, 'char_lyra_ssr');
+  assert.equal(firstPull.record.isDuplicate, false);
+  assert.equal(firstPull.nextSave.lyraUnlocked, true);
+  assert.equal(firstPull.nextSave.lyraAwakening, 0);
+  assert.equal(firstPull.nextSave.pityCount, 0);
+
+  const dupPull = performSinglePull(
+    { ...firstPull.nextSave, pityCount: HARD_PITY_LIMIT - 1 },
+    { rng: () => 0.999, now: 2100, bannerId: 'lyra' }
+  );
+  assert.equal(dupPull.record.isDuplicate, true);
+  assert.equal(dupPull.nextSave.lyraAwakening, 1);
 });
 
 test('all 10 stage bosses, per-stage BGM labels, keybindings, and non-persistent sub-skills match specification', () => {
@@ -445,7 +476,11 @@ test('all 10 stage bosses, per-stage BGM labels, keybindings, and non-persistent
   assert.equal(new Set(STAGE_BGM_NAMES).size, 10);
 
   const initial = createInitialSaveData();
-  assert.equal(initial.selectedCharacter, 'luna');
+  assert.equal(initial.selectedCharacter, 'velvera');
+  assert.equal(initial.velveraUnlocked, true);
+  assert.equal(initial.lunaUnlocked, false);
+  assert.equal(initial.lyraUnlocked, false);
+  assert.equal(initial.witchUnlocked, false);
   assert.deepEqual(initial.audioSettings, {
     masterVolume: 80,
     bgmVolume: 70,
@@ -461,17 +496,21 @@ test('all 10 stage bosses, per-stage BGM labels, keybindings, and non-persistent
   assert.equal(hasExistingSaveData(), false);
 });
 
-test('Luna (hooded scythe) and Seraphina (witch) have dedicated skills, weapons, forge unlocks, and gacha banners', () => {
+test('Luna (hooded scythe) and Seraphina (witch) have 5 dedicated skills, weapons, forge unlocks, and gacha unlock banners', () => {
   const base = createInitialSaveData();
   assert.deepEqual(getCharacterActiveSkills('luna'), [
     'luna_soul_harvest',
     'luna_umbral_rush',
     'luna_lunar_eclipse',
+    'luna_phantom_scythe',
+    'luna_abyssal_execution',
   ]);
   assert.deepEqual(getCharacterActiveSkills('witch'), [
     'witch_raven_arcana',
     'witch_starfall_meteor',
     'witch_void_vortex',
+    'witch_arcane_lightning',
+    'witch_chrono_nova',
   ]);
 
   const rich = {
@@ -504,7 +543,7 @@ test('Luna (hooded scythe) and Seraphina (witch) have dedicated skills, weapons,
   assert.equal(witchForged.witchWeapon.forgeLevel, 2);
   assert.ok(witchForged.unlockedWitchWeapons.includes('amethyst_lantern_rod'));
 
-  // Gacha SSR banner pulls for Luna & Witch
+  // Gacha SSR banner pulls unlock Luna & Witch first, then increment Awakening on duplicates
   const nearPityLuna = { ...rich, pityCount: HARD_PITY_LIMIT - 1 };
   const lunaPull = performSinglePull(nearPityLuna, {
     rng: () => 0.999,
@@ -513,7 +552,16 @@ test('Luna (hooded scythe) and Seraphina (witch) have dedicated skills, weapons,
   });
   assert.equal(lunaPull.record.rarity, 'SSR');
   assert.equal(lunaPull.record.itemId, 'char_luna_ssr');
-  assert.equal(lunaPull.nextSave.lunaAwakening, 1);
+  assert.equal(lunaPull.record.isDuplicate, false);
+  assert.equal(lunaPull.nextSave.lunaUnlocked, true);
+  assert.equal(lunaPull.nextSave.lunaAwakening, 0);
+
+  const lunaDup = performSinglePull(
+    { ...lunaPull.nextSave, pityCount: HARD_PITY_LIMIT - 1 },
+    { rng: () => 0.999, now: 3100, bannerId: 'luna' }
+  );
+  assert.equal(lunaDup.record.isDuplicate, true);
+  assert.equal(lunaDup.nextSave.lunaAwakening, 1);
 
   const nearPityWitch = { ...rich, pityCount: HARD_PITY_LIMIT - 1 };
   const witchPull = performSinglePull(nearPityWitch, {
@@ -523,7 +571,9 @@ test('Luna (hooded scythe) and Seraphina (witch) have dedicated skills, weapons,
   });
   assert.equal(witchPull.record.rarity, 'SSR');
   assert.equal(witchPull.record.itemId, 'char_witch_ssr');
-  assert.equal(witchPull.nextSave.witchAwakening, 1);
+  assert.equal(witchPull.record.isDuplicate, false);
+  assert.equal(witchPull.nextSave.witchUnlocked, true);
+  assert.equal(witchPull.nextSave.witchAwakening, 0);
 });
 
 test('supply chest offer returns 4 choices (1 heal 1%-45% + 3 distinct items), boss bar has 5 layers, sub-skill cap is 4, and dummy resets at 8s', () => {
@@ -612,13 +662,16 @@ test('supply chest offer returns 4 choices (1 heal 1%-45% + 3 distinct items), b
   assert.equal(shouldResetDummyMetrics(10, 17.9), false);
   assert.equal(shouldResetDummyMetrics(10, 18), true);
 
-  // Default language & mobile layout offsets
+  // Default language & 9-button mobile layout config (no manual attack button)
   const save = createInitialSaveData();
   assert.equal(save.language, 'id');
   assert.deepEqual(save.mobileControls, DEFAULT_MOBILE_CONTROLS);
   assert.equal(DEFAULT_MOBILE_CONTROLS.skillsOffsetX, 0);
   assert.equal(DEFAULT_MOBILE_CONTROLS.dpadOffsetX, 0);
   assert.equal(DEFAULT_MOBILE_CONTROLS.actionOffsetX, 0);
+  assert.equal(ALL_MOBILE_BUTTON_IDS.length, 9);
+  assert.equal((ALL_MOBILE_BUTTON_IDS as string[]).includes('attack'), false);
+  assert.deepEqual(Object.keys(DEFAULT_MOBILE_CONTROLS.buttons).sort(), [...ALL_MOBILE_BUTTON_IDS].sort());
 });
 
 test('SkillVfxPool tracks player sustain/drain endpoints, wraps ring buffer, and expires cleanly', () => {
@@ -698,29 +751,39 @@ test('SkillVfxPool tracks player sustain/drain endpoints, wraps ring buffer, and
   assert.equal(vfx.items.some((item) => item.active), false);
 });
 
-test('Sanctum menu scopes strictly separate Character+Event, Gacha+Daily, and Enchant Weapon flows', () => {
+test('Sanctum menu scopes strictly separate Character, Gacha, Events, Daily, and Enchant Weapon flows', () => {
   const charNav = getSanctumNavForScope('character');
   assert.deepEqual(charNav.primaryTabs, ['skills', 'weapon']);
-  assert.equal(charNav.sideTab, 'events');
+  assert.equal(charNav.sideTab, null);
   assert.equal(charNav.primaryTabs.includes('gacha'), false);
   assert.equal(charNav.primaryTabs.includes('daily'), false);
+  assert.equal(charNav.primaryTabs.includes('events'), false);
   assert.equal(charNav.primaryTabs.includes('bestiary'), false);
 
   const gachaNav = getSanctumNavForScope('gacha');
   assert.deepEqual(gachaNav.primaryTabs, ['gacha']);
-  assert.equal(gachaNav.sideTab, 'daily');
+  assert.equal(gachaNav.sideTab, null);
   assert.equal(gachaNav.primaryTabs.includes('skills'), false);
   assert.equal(gachaNav.primaryTabs.includes('weapon'), false);
+  assert.equal(gachaNav.primaryTabs.includes('daily'), false);
   assert.equal(gachaNav.primaryTabs.includes('bestiary'), false);
+
+  const eventsNav = getSanctumNavForScope('events');
+  assert.deepEqual(eventsNav.primaryTabs, ['events']);
+  assert.equal(eventsNav.sideTab, null);
+
+  const dailyNav = getSanctumNavForScope('daily');
+  assert.deepEqual(dailyNav.primaryTabs, ['daily']);
+  assert.equal(dailyNav.sideTab, null);
 
   const weaponNav = getSanctumNavForScope('weapon');
   assert.deepEqual(weaponNav.primaryTabs, ['weapon']);
   assert.equal(weaponNav.sideTab, null);
 
   assert.equal(getScopeForSanctumTab('skills'), 'character');
-  assert.equal(getScopeForSanctumTab('events'), 'character');
+  assert.equal(getScopeForSanctumTab('events'), 'events');
   assert.equal(getScopeForSanctumTab('gacha'), 'gacha');
-  assert.equal(getScopeForSanctumTab('daily'), 'gacha');
+  assert.equal(getScopeForSanctumTab('daily'), 'daily');
   assert.equal(getScopeForSanctumTab('weapon'), 'weapon');
 });
 
@@ -886,16 +949,78 @@ test('critical combo milestone triggers strictly on multiples of 50 and sub-skil
   assert.deepEqual(getSubSkillVfxScale(99), lv3);
 });
 
-test('re-scaled 10,000 mob HP and 99,999 boss HP stay balanced with player damage and 30% 5-chest rule', () => {
+test('Lv.1 basic attack deals tens-to-hundreds damage across all characters while 10,000 mob HP and 99,999 boss HP stay balanced', () => {
   assert.equal(NORMAL_MONSTER_BASE_HP, 10000);
   assert.equal(BOSS_MAX_HP, 99999);
   assert.equal(FIVE_CHEST_PROBABILITY, 0.3);
   assert.ok(COMBAT_DAMAGE_SCALE >= 40);
+  assert.ok(BASIC_ATTACK_DAMAGE_RATIO > 0 && BASIC_ATTACK_DAMAGE_RATIO < 0.2);
 
-  const stats = computePlayerStats(createInitialSaveData());
-  assert.equal(stats.maxHp, 100);
-  const slash = calculateSlashDamage(stats, 1.0, () => 0.5);
-  assert.ok(slash.damage >= 1200 && slash.damage <= 4000);
+  const base = createInitialSaveData();
+  const heroes = ['velvera', 'luna', 'lyra', 'witch'] as const;
+  const step1NormByHero: Record<(typeof heroes)[number], number> = {
+    velvera: 0,
+    luna: 0,
+    lyra: 0,
+    witch: 0,
+  };
+
+  for (const hero of heroes) {
+    const heroSave = {
+      ...base,
+      selectedCharacter: hero,
+    };
+    const stats = computePlayerStats(heroSave);
+    assert.equal(stats.maxHp, 100);
+
+    for (const step of [1, 2, 3]) {
+      const mult = getBasicAttackComboMultiplier(hero, step);
+      const norm = calculateSlashDamage(stats, mult, () => 0.5, 1, hero);
+      const crit = calculateSlashDamage(stats, mult, () => 0.0, 1, hero);
+      assert.equal(norm.isCrit, false);
+      assert.equal(crit.isCrit, true);
+      assert.ok(
+        norm.damage >= 35 && norm.damage < 1000,
+        `${hero} Lv.1 step ${step} normal damage ${norm.damage} must stay in tens-hundreds`
+      );
+      assert.ok(
+        crit.damage >= 50 && crit.damage < 1000,
+        `${hero} Lv.1 step ${step} crit damage ${crit.damage} must stay in tens-hundreds (<1000)`
+      );
+      assert.ok(crit.damage > norm.damage);
+      if (step === 1) step1NormByHero[hero] = norm.damage;
+    }
+  }
+
+  // Character identity inside tens-hundreds range: fast Lyra < Velvera < heavy Luna
+  assert.ok(step1NormByHero.lyra < 100, `Lyra step 1 (${step1NormByHero.lyra}) should start in tens`);
+  assert.ok(step1NormByHero.lyra < step1NormByHero.velvera);
+  assert.ok(step1NormByHero.velvera < step1NormByHero.luna);
+
+  // Gradual Lv.1 -> Lv.50 curve without abrupt spikes
+  let prevDamage = step1NormByHero.velvera;
+  for (let lv = 2; lv <= 50; lv++) {
+    const lvStats = computePlayerStats({ ...base, characterLevel: lv });
+    const lvDamage = calculateSlashDamage(
+      lvStats,
+      getBasicAttackComboMultiplier('velvera', 1),
+      () => 0.5,
+      1,
+      'velvera'
+    ).damage;
+    assert.ok(lvDamage >= prevDamage, `Lv.${lv} basic damage must not decrease`);
+    assert.ok(lvDamage - prevDamage <= 15, `Lv.${lv} step growth (${lvDamage - prevDamage}) must remain gradual`);
+    prevDamage = lvDamage;
+  }
+
+  // White Cat Merchant spawns every 3 rooms (1-3, 2-1, 2-4, 3-2, ...) instead of locked to Stage 3
+  assert.equal(shouldSpawnCatMerchant(1, 1), false);
+  assert.equal(shouldSpawnCatMerchant(1, 2), false);
+  assert.equal(shouldSpawnCatMerchant(1, 3), true);
+  assert.equal(shouldSpawnCatMerchant(2, 1), true);
+  assert.equal(shouldSpawnCatMerchant(2, 4), true);
+  assert.equal(shouldSpawnCatMerchant(3, 1), false);
+  assert.equal(shouldSpawnCatMerchant(3, 2), true);
 
   const bossBars = computeBossBarState(99999, BOSS_MAX_HP, 5);
   assert.equal(bossBars.barsRemaining, 5);
@@ -950,6 +1075,78 @@ test('18 sub-skills, Item + Sub-Skill combos, Silver drops, and White Cat shop o
   assert.equal(offers.filter((o) => o.kind === 'item').length, 2);
   assert.equal(offers.filter((o) => o.kind === 'sub_skill').length, 2);
   assert.ok(offers.every((o) => o.priceSilver > 0));
+});
+
+test('ATK_PER_CHAR_LEVEL scales attack by +1 per level, Daily Quests track & reset cleanly, and locked heroes fall back to Velvera', () => {
+  assert.equal(ATK_PER_CHAR_LEVEL, 1);
+  const base = createInitialSaveData();
+  const baseStats = computePlayerStats(base);
+  const lv2 = upgradeCharacterLevel({ ...base, gold: 1000, skillEssence: 100 });
+  const lv2Stats = computePlayerStats(lv2);
+  const deltaAtk = lv2Stats.attack - baseStats.attack;
+  assert.ok(Math.abs(deltaAtk - ATK_PER_CHAR_LEVEL * COMBAT_DAMAGE_SCALE) <= 1);
+
+  // Hero unlock gating check
+  assert.equal(isCharacterUnlocked(base, 'velvera'), true);
+  assert.equal(isCharacterUnlocked(base, 'luna'), false);
+  assert.equal(isCharacterUnlocked(base, 'lyra'), false);
+  assert.equal(isCharacterUnlocked(base, 'witch'), false);
+  const loaded = loadSaveData();
+  assert.equal(loaded.selectedCharacter, 'velvera');
+
+  // 5 active skills per hero across all 4 heroes
+  for (const hero of ['velvera', 'luna', 'lyra', 'witch'] as const) {
+    assert.equal(getCharacterActiveSkills(hero).length, 5);
+  }
+
+  // Daily quests tracking, claim, double-claim protection & daily date reset
+  const day1 = '2026-11-26';
+  let progressed = trackDailyQuestProgress(base, 'kills', 20, day1);
+  progressed = trackDailyQuestProgress(progressed, 'pulls', 1, day1);
+  assert.equal(getClaimableDailyQuestCount(progressed, day1), 2);
+
+  const killQuest = DAILY_QUESTS.find((q) => q.metric === 'kills')!;
+  const claimed = claimDailyQuestReward(progressed, killQuest.id, day1);
+  assert.equal(claimed.nextSave.gems, progressed.gems + killQuest.rewardGems);
+  assert.equal(getClaimableDailyQuestCount(claimed.nextSave, day1), 1);
+  assert.throws(() => claimDailyQuestReward(claimed.nextSave, killQuest.id, day1));
+
+  // New date resets daily quest progress and claimed IDs
+  const day2 = '2026-11-27';
+  const resetDay2 = syncDailyQuestDate(claimed.nextSave, day2);
+  assert.equal(resetDay2.dailyQuests.dateKey, day2);
+  assert.equal(resetDay2.dailyQuests.progress.kills, 0);
+  assert.deepEqual(resetDay2.dailyQuests.claimedIds, []);
+  assert.equal(getClaimableDailyQuestCount(resetDay2, day2), 0);
+});
+
+test('all 13 BGM tracks, boosted volume balance, and stereo pan layout are valid and non-silent', () => {
+  assert.equal(ALL_BGM_TRACK_IDS.length, 13);
+  for (const id of ['title', 'lobby', 'enchant'] as const) {
+    assert.ok(ALL_BGM_TRACK_IDS.includes(id));
+    const spec = BGM_TRACKS[id];
+    assert.ok(spec.melody.some((f) => f > 0));
+    assert.equal(spec.drumPattern.replace(/\./g, '').length, 0);
+  }
+  for (let s = 1; s <= 10; s++) {
+    const id = `stage_${s}` as keyof typeof BGM_TRACKS;
+    const spec = BGM_TRACKS[id];
+    assert.ok(spec, `Missing ${id}`);
+    assert.ok(spec.melody.some((f) => f > 0));
+    assert.ok(spec.bass.some((f) => f > 0));
+    assert.ok(spec.stepMs >= 120 && spec.stepMs <= 300);
+  }
+
+  const sanctuaryLevels = getBgmVoiceLevels(true);
+  const stageLevels = getBgmVoiceLevels(false);
+  assert.ok(sanctuaryLevels.leadGain >= 0.12);
+  assert.ok(stageLevels.leadGain >= 0.13);
+  assert.ok(stageLevels.bassGain >= 0.14);
+  assert.ok(stageLevels.kickGain >= 0.2);
+  // Balanced L/R panning around center (bass centered at 0, harmony left, lead/hihat slightly right)
+  assert.equal(stageLevels.panBass, 0);
+  assert.ok(stageLevels.panHarmony < 0 && stageLevels.panLead > 0);
+  assert.ok(Math.abs(stageLevels.panHarmony) <= 0.35 && Math.abs(stageLevels.panHihat) <= 0.35);
 });
 
 

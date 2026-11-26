@@ -21,6 +21,7 @@ export interface UiStrings {
   lobbyDummyDps: string;
   lobbyNewTag: string;
   // Controls & Dungeon HUD
+  attack: string;
   dash: string;
   jump: string;
   bag: string;
@@ -137,6 +138,18 @@ export interface UiStrings {
   bagComboPanelTitle: string;
   bagComboActiveBadge: string;
   bagComboLockedHint: string;
+  // Daily Quests, Hero Lock, Per-button Customizer & Mobile Orientation
+  dailyQuestsTitle: string;
+  dailyQuestsSubtitle: string;
+  dailyQuestClaimBtn: string;
+  dailyQuestClaimedBadge: string;
+  heroLockedBadge: string;
+  heroUnlockGachaBtn: string;
+  settingsButtonScale: string;
+  settingsSelectedButton: string;
+  settingsApplyAllOpacity: string;
+  rotateDeviceTitle: string;
+  rotateDeviceHint: string;
 }
 
 const ID_STRINGS: UiStrings = {
@@ -157,6 +170,7 @@ const ID_STRINGS: UiStrings = {
   lobbyDummyMax: 'Max',
   lobbyDummyDps: 'DPS',
   lobbyNewTag: 'Baru',
+  attack: 'Serang',
   dash: 'Dash',
   jump: 'Lompat',
   bag: 'Tas',
@@ -267,6 +281,17 @@ const ID_STRINGS: UiStrings = {
   bagComboPanelTitle: 'Combo Item & Sub-Skill',
   bagComboActiveBadge: 'AKTIF',
   bagComboLockedHint: 'Pasangkan Item & Sub-Skill cocok untuk efek ekstra',
+  dailyQuestsTitle: 'Misi Harian (Reset Setiap Hari)',
+  dailyQuestsSubtitle: 'Selesaikan misi di dungeon & gacha untuk klaim bonus Gems & Skill Essence.',
+  dailyQuestClaimBtn: 'Klaim',
+  dailyQuestClaimedBadge: 'Diklaim',
+  heroLockedBadge: 'Terkunci · Gacha',
+  heroUnlockGachaBtn: 'Buka di Gacha',
+  settingsButtonScale: 'Ukuran Tombol',
+  settingsSelectedButton: 'Tombol Dipilih',
+  settingsApplyAllOpacity: 'Terapkan ke Semua',
+  rotateDeviceTitle: 'Putar Perangkat ke Horizontal (Landscape)',
+  rotateDeviceHint: 'Game aksi side-scrolling ini dirancang penuh untuk layar horizontal.',
 };
 
 const EN_STRINGS: UiStrings = {
@@ -287,6 +312,7 @@ const EN_STRINGS: UiStrings = {
   lobbyDummyMax: 'Max',
   lobbyDummyDps: 'DPS',
   lobbyNewTag: 'New',
+  attack: 'Attack',
   dash: 'Dash',
   jump: 'Jump',
   bag: 'Bag',
@@ -397,6 +423,17 @@ const EN_STRINGS: UiStrings = {
   bagComboPanelTitle: 'Item & Sub-Skill Combos',
   bagComboActiveBadge: 'ACTIVE',
   bagComboLockedHint: 'Pair matching Run Item & Sub-Skill for bonus power',
+  dailyQuestsTitle: 'Daily Quests (Resets Daily)',
+  dailyQuestsSubtitle: 'Complete dungeon & summon missions for bonus Gems and Skill Essence.',
+  dailyQuestClaimBtn: 'Claim',
+  dailyQuestClaimedBadge: 'Claimed',
+  heroLockedBadge: 'Locked · Gacha',
+  heroUnlockGachaBtn: 'Get in Gacha',
+  settingsButtonScale: 'Button Size',
+  settingsSelectedButton: 'Selected Button',
+  settingsApplyAllOpacity: 'Apply to All',
+  rotateDeviceTitle: 'Rotate Device to Landscape',
+  rotateDeviceHint: 'This side-scrolling action slasher plays in full horizontal landscape mode.',
 };
 
 export function getUiStrings(lang: LanguageCode = 'id'): UiStrings {
